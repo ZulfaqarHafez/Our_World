@@ -1,14 +1,24 @@
 import { Router, Request, Response } from "express";
 import multer from "multer";
-// @ts-ignore - pdf-parse CJS/ESM interop
-import pdf from "pdf-parse";
-// @ts-ignore - file-type v16 CJS/ESM interop
-import fileType from "file-type";
 import {
   getSupabaseAdmin,
   getOpenAI,
   getUserFromRequest,
 } from "../lib/clients.js";
+
+// Lazy-load pdf-parse and file-type to avoid initialization crashes on Vercel
+// pdf-parse tries to load a test PDF on import which doesn't exist in serverless
+let _pdfParse: typeof import("pdf-parse") | null = null;
+async function getPdfParse() {
+  if (!_pdfParse) _pdfParse = await import("pdf-parse");
+  return (_pdfParse as any).default || _pdfParse;
+}
+
+let _fileType: typeof import("file-type") | null = null;
+async function getFileType() {
+  if (!_fileType) _fileType = await import("file-type");
+  return (_fileType as any).default || _fileType;
+}
 
 export const studyRouter = Router();
 
@@ -123,7 +133,8 @@ studyRouter.post("/ingest", upload.single("file"), async (req: Request, res: Res
     if (!file) return res.status(400).json({ error: "No file uploaded" });
 
     // Validate MIME type via magic bytes (don't trust Content-Type header)
-    const detectedType = await fileType.fromBuffer(file.buffer);
+    const ft = await getFileType();
+    const detectedType = await ft.fromBuffer(file.buffer);
     const mimeType = detectedType?.mime || file.mimetype;
 
     // For text files, fileType.fromBuffer may return undefined — that's OK
@@ -137,6 +148,7 @@ studyRouter.post("/ingest", upload.single("file"), async (req: Request, res: Res
     // 1. Parse PDF text
     let text = "";
     if (mimeType === "application/pdf") {
+      const pdf = await getPdfParse();
       const pdfData = await pdf(file.buffer);
       text = pdfData.text;
     } else {

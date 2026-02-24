@@ -62,7 +62,17 @@ app.use(express.json({ limit: "1mb" }));
 
 // Health check
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    env: {
+      SUPABASE_URL: !!process.env.SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+      SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
+      OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
+      VERCEL: !!process.env.VERCEL,
+    },
+  });
 });
 
 // Routes
