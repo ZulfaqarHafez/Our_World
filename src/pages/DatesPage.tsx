@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Plus, MapPin, Search, Loader2, X, Calendar as CalendarIcon } from "lucide-react";
+import { Plus, MapPin, Search, Loader2, X, Calendar as CalendarIcon, ImagePlus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDates } from "@/hooks/useDatesGames";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { apiFetch, getAccessToken } from "@/lib/api";
 import datesHero from "@/assets/dates-hero.jpg";
 
 const container = {
@@ -23,6 +24,7 @@ const DatesPage = () => {
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
   const [form, setForm] = useState({
     title: "",
     date: new Date().toISOString().split("T")[0],
@@ -31,11 +33,77 @@ const DatesPage = () => {
     mood: "",
     journal_entry: "",
   });
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch on mount
   useEffect(() => {
     fetchDates();
   }, [fetchDates]);
+
+  // Fetch signed URLs for cover photos
+  const [coverUrls, setCoverUrls] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const paths = dates
+      .filter((d) => d.photos && d.photos.length > 0)
+      .map((d) => d.photos[0]);
+    if (paths.length === 0) return;
+
+    (async () => {
+      try {
+        const data = await apiFetch<{ urls: { path: string; signedUrl: string }[] }>("/api/photos/sign", {
+          method: "POST",
+          body: JSON.stringify({ paths }),
+        });
+        const map: Record<string, string> = {};
+        data.urls.forEach((u) => { if (u.signedUrl) map[u.path] = u.signedUrl; });
+        setCoverUrls(map);
+      } catch {
+        // silent — fallback to mood emoji
+      }
+    })();
+  }, [dates]);
+
+  // Generate previews when files change
+  useEffect(() => {
+    const urls = imageFiles.map((f) => URL.createObjectURL(f));
+    setImagePreviews(urls);
+    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  }, [imageFiles]);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const remaining = 5 - imageFiles.length;
+    const toAdd = files.slice(0, remaining);
+    setImageFiles((prev) => [...prev, ...toAdd]);
+    // Reset input so the same file can be re-selected
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeImage = (index: number) => {
+    setImageFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Upload images and return storage paths
+  const uploadImages = async (): Promise<string[]> => {
+    if (imageFiles.length === 0) return [];
+    const token = await getAccessToken();
+    if (!token) throw new Error("Not authenticated");
+    const fd = new FormData();
+    imageFiles.forEach((f) => fd.append("images", f));
+    const res = await fetch("/api/photos/upload", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: fd,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || "Upload failed");
+    }
+    const data = await res.json();
+    return data.paths as string[];
+  };
 
   const filtered = dates.filter(
     (d) =>
@@ -46,7 +114,11 @@ const DatesPage = () => {
   const handleCreate = async () => {
     if (!form.title.trim() || !form.date) return;
     setSaving(true);
+    setFormError("");
     try {
+      // Upload images first
+      const photoPaths = await uploadImages();
+
       await createDate({
         title: form.title,
         date: form.date,
@@ -54,11 +126,14 @@ const DatesPage = () => {
         description: form.description,
         mood: form.mood || undefined,
         journal_entry: form.journal_entry || undefined,
+        photos: photoPaths.length > 0 ? photoPaths : undefined,
       });
       setShowAdd(false);
       setForm({ title: "", date: new Date().toISOString().split("T")[0], location: "", description: "", mood: "", journal_entry: "" });
+      setImageFiles([]);
     } catch (err: any) {
       console.error("Create failed:", err);
+      setFormError(err.message || "Something went wrong");
     } finally {
       setSaving(false);
     }
@@ -132,6 +207,55 @@ const DatesPage = () => {
               onChange={(e) => setForm((f) => ({ ...f, journal_entry: e.target.value }))}
               rows={3}
             />
+
+            {/* Image upload */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-foreground">Photos ({imageFiles.length}/5)</span>
+                {imageFiles.length < 5 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <ImagePlus className="h-4 w-4" />
+                    Add Photos
+                  </Button>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  multiple
+                  className="hidden"
+                  onChange={handleImageSelect}
+                />
+              </div>
+              {imagePreviews.length > 0 && (
+                <div className="flex gap-2 flex-wrap">
+                  {imagePreviews.map((src, i) => (
+                    <div key={i} className="relative group w-20 h-20 rounded-lg overflow-hidden border border-border">
+                      <img src={src} alt={`Preview ${i + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(i)}
+                        className="absolute top-0.5 right-0.5 bg-destructive text-destructive-foreground rounded-full h-5 w-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">JPG, PNG, WebP, GIF — max 5 MB each</p>
+            </div>
+
+            {formError && (
+              <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{formError}</p>
+            )}
+
             <Button
               className="gradient-rose text-primary-foreground w-full"
               disabled={!form.title.trim() || saving}
@@ -169,11 +293,19 @@ const DatesPage = () => {
               to={`/dates/${date.id}`}
               className="block rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 group bg-card"
             >
-              {/* Visual header with mood */}
+              {/* Visual header with photo or mood */}
               <div className="relative h-32 overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-5xl opacity-40">{date.mood || "💕"}</span>
-                </div>
+                {date.photos?.[0] && coverUrls[date.photos[0]] ? (
+                  <img
+                    src={coverUrls[date.photos[0]]}
+                    alt={date.title}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-5xl opacity-40">{date.mood || "💕"}</span>
+                  </div>
+                )}
                 <span className="absolute top-3 right-3 text-xl bg-card/80 backdrop-blur-sm rounded-full h-9 w-9 flex items-center justify-center">
                   {date.mood || "💕"}
                 </span>

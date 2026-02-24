@@ -1,9 +1,90 @@
 import { Router, Request, Response } from "express";
+import multer from "multer";
+import crypto from "crypto";
 import { getSupabaseAdmin, getUserFromRequest } from "../lib/clients.js";
 
 export const photosRouter = Router();
 
 const MAX_PATHS = 50;
+const MAX_IMAGES = 5;
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB per image
+const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_IMAGE_SIZE, files: MAX_IMAGES },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_MIME.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Unsupported image type: ${file.mimetype}`));
+    }
+  },
+});
+
+// ─── POST /api/photos/upload — Upload up to 5 images ────────
+
+photosRouter.post("/upload", (req: Request, res: Response, next) => {
+  upload.array("images", MAX_IMAGES)(req, res, (err: any) => {
+    if (err) {
+      console.error("Multer error:", err.message);
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({ error: "File too large (max 5 MB each)" });
+      }
+      if (err.code === "LIMIT_FILE_COUNT") {
+        return res.status(400).json({ error: "Too many files (max 5)" });
+      }
+      return res.status(400).json({ error: err.message });
+    }
+    next();
+  });
+}, async (req: Request, res: Response) => {
+  try {
+    const user = await getUserFromRequest(req.headers.authorization);
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+    const files = req.files as Express.Multer.File[];
+    if (!files || files.length === 0) {
+      return res.status(400).json({ error: "No images provided" });
+    }
+
+    console.log(`Uploading ${files.length} image(s) for user ${user.id}`);
+
+    const supabase = getSupabaseAdmin();
+    const paths: string[] = [];
+
+    for (const file of files) {
+      const ext = file.originalname.split(".").pop()?.toLowerCase() || "jpg";
+      const safeName = `${crypto.randomUUID()}.${ext}`;
+      const storagePath = `${user.id}/${safeName}`;
+
+      console.log(`Uploading ${file.originalname} (${file.size} bytes) → ${storagePath}`);
+
+      const { data, error } = await supabase.storage
+        .from("couple-photos")
+        .upload(storagePath, file.buffer, {
+          contentType: file.mimetype,
+          upsert: false,
+        });
+
+      if (error) {
+        console.error(`Upload error for ${file.originalname}:`, JSON.stringify(error));
+        return res.status(500).json({ error: `Failed to upload ${file.originalname}: ${error.message}` });
+      }
+
+      console.log(`Uploaded successfully:`, data);
+      paths.push(storagePath);
+    }
+
+    res.json({ paths });
+  } catch (err: any) {
+    console.error("Photos upload error:", err?.message, err?.stack);
+    if (err.message?.includes("Unsupported image type")) {
+      return res.status(400).json({ error: err.message });
+    }
+    res.status(500).json({ error: err.message || "Internal server error" });
+  }
+});
 
 // ─── POST /api/photos/sign — Generate signed URLs ───────────
 // Accepts: { paths: string[] }

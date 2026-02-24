@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, MapPin, Calendar as CalendarIcon, Pencil, Trash2, Trophy, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useDates } from "@/hooks/useDatesGames";
+import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import type { DateRow, GameRow } from "@/lib/types";
 
@@ -13,6 +14,7 @@ const DateDetail = () => {
   const [dateEntry, setDateEntry] = useState<(DateRow & { games: GameRow[] }) | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -22,6 +24,25 @@ const DateDetail = () => {
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [id, fetchDate]);
+
+  // Fetch signed URLs for photos
+  useEffect(() => {
+    if (!dateEntry || !dateEntry.photos || dateEntry.photos.length === 0) {
+      setPhotoUrls([]);
+      return;
+    }
+    (async () => {
+      try {
+        const data = await apiFetch<{ urls: { path: string; signedUrl: string }[] }>("/api/photos/sign", {
+          method: "POST",
+          body: JSON.stringify({ paths: dateEntry.photos }),
+        });
+        setPhotoUrls(data.urls.map((u) => u.signedUrl).filter(Boolean));
+      } catch {
+        setPhotoUrls([]);
+      }
+    })();
+  }, [dateEntry]);
 
   const handleDelete = async () => {
     if (!id || !confirm("Delete this date entry?")) return;
@@ -62,9 +83,13 @@ const DateDetail = () => {
 
       {/* Header */}
       <div className="relative rounded-2xl overflow-hidden h-56 sm:h-72 bg-gradient-to-br from-primary/20 to-accent/20">
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-8xl opacity-20">{dateEntry.mood || "💕"}</span>
-        </div>
+        {photoUrls[0] ? (
+          <img src={photoUrls[0]} alt={dateEntry.title} className="w-full h-full object-cover" />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-8xl opacity-20">{dateEntry.mood || "💕"}</span>
+          </div>
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-foreground/50 to-transparent" />
         <div className="absolute bottom-4 left-5 right-5 flex items-end justify-between">
           <div>
@@ -103,6 +128,25 @@ const DateDetail = () => {
       {dateEntry.description && (
         <div className="glass-card p-5">
           <p className="text-foreground/90 leading-relaxed">{dateEntry.description}</p>
+        </div>
+      )}
+
+      {/* Photos Gallery */}
+      {photoUrls.length > 0 && (
+        <div>
+          <h2 className="font-serif text-xl font-semibold text-foreground mb-3">📸 Photos</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {photoUrls.map((url, i) => (
+              <div key={i} className="rounded-xl overflow-hidden aspect-square shadow-sm hover:shadow-md transition-shadow">
+                <img
+                  src={url}
+                  alt={`Photo ${i + 1}`}
+                  className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300"
+                  onClick={() => window.open(url, "_blank")}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
