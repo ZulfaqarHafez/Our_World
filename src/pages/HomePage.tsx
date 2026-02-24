@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Calendar, Gamepad2, BookOpen, Heart, ArrowRight, MapPin, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -16,13 +15,8 @@ const item = {
 };
 
 const HomePage = () => {
-  const { dates, loading: datesLoading, fetchDates } = useDates();
-  const { stats, loading: gamesLoading, fetchStats } = useGames();
-
-  useEffect(() => {
-    fetchDates();
-    fetchStats();
-  }, [fetchDates, fetchStats]);
+  const { dates, loading: datesLoading } = useDates();
+  const { stats, loading: gamesLoading } = useGames();
 
   const recentDates = dates.slice(0, 3);
   const zulWins = stats?.zulWins ?? 0;

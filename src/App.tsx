@@ -14,7 +14,16 @@ import GamesPage from "@/pages/GamesPage";
 import StudyPage from "@/pages/StudyPage";
 import NotFound from "@/pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 2 * 60 * 1000,  // data stays fresh for 2 minutes
+      gcTime: 10 * 60 * 1000,    // unused cache kept for 10 minutes
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

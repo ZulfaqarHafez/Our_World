@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Plus, Trophy, Crown, Flame, Loader2, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useGames } from "@/hooks/useDatesGames";
@@ -25,8 +25,8 @@ const item = {
 };
 
 const GamesPage = () => {
-  const { games, stats, loading, fetchGames, fetchStats, createGame } = useGames();
   const [activeCategory, setActiveCategory] = useState<string>("All");
+  const { games, stats, loading, createGame } = useGames(activeCategory);
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -38,16 +38,6 @@ const GamesPage = () => {
     notes: "",
     played_at: new Date().toISOString().split("T")[0],
   });
-
-  // Fetch on mount and when category changes
-  useEffect(() => {
-    fetchGames(activeCategory);
-  }, [fetchGames, activeCategory]);
-
-  // Fetch stats on mount
-  useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
 
   const filtered = games;
 
@@ -76,7 +66,6 @@ const GamesPage = () => {
       });
       setShowAdd(false);
       setForm({ game_name: "", game_category: "Board Game", winner: "Zul", score_zul: "", score_gf: "", notes: "", played_at: new Date().toISOString().split("T")[0] });
-      fetchStats(); // Refresh stats after adding
     } catch (err: any) {
       console.error("Create failed:", err);
     } finally {

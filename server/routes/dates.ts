@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getUserFromRequest, getSupabaseForUser } from "../lib/clients.js";
+import { getUserFromRequest, getSupabaseForUser, getSupabaseAdmin } from "../lib/clients.js";
 
 export const datesRouter = Router();
 
@@ -37,7 +37,31 @@ datesRouter.get("/", async (req, res) => {
     const { data, error } = await query;
     if (error) throw error;
 
-    res.json(data);
+    // Batch-sign cover photos (first photo of each date) in one call
+    const coverPaths = (data || [])
+      .filter((d: any) => d.photos?.length > 0)
+      .map((d: any) => d.photos[0]);
+
+    let coverMap: Record<string, string> = {};
+    if (coverPaths.length > 0) {
+      const admin = getSupabaseAdmin();
+      const { data: signed } = await admin.storage
+        .from("couple-photos")
+        .createSignedUrls(coverPaths, 3600);
+      if (signed) {
+        signed.forEach((s: any, i: number) => {
+          if (s.signedUrl) coverMap[coverPaths[i]] = s.signedUrl;
+        });
+      }
+    }
+
+    // Attach cover_url to each date
+    const enriched = (data || []).map((d: any) => ({
+      ...d,
+      cover_url: d.photos?.[0] ? (coverMap[d.photos[0]] || null) : null,
+    }));
+
+    res.json(enriched);
   } catch (err: any) {
     console.error("GET /dates error:", err);
     res.status(500).json({ error: err.message });
@@ -65,16 +89,34 @@ datesRouter.get("/:id", async (req, res) => {
       return;
     }
 
-    // Fetch linked games
-    const { data: games, error: gamesErr } = await sb
+    // Fetch linked games and sign photo URLs in parallel
+    const gamesPromise = sb
       .from("games")
       .select("*")
       .eq("date_id", req.params.id)
       .order("played_at", { ascending: false });
 
+    let photoUrls: string[] = [];
+    const photoPaths: string[] = dateRow.photos || [];
+    let signPromise: Promise<void> = Promise.resolve();
+
+    if (photoPaths.length > 0) {
+      const admin = getSupabaseAdmin();
+      signPromise = admin.storage
+        .from("couple-photos")
+        .createSignedUrls(photoPaths, 3600)
+        .then(({ data: signed }) => {
+          if (signed) {
+            photoUrls = signed.map((s: any) => s.signedUrl).filter(Boolean);
+          }
+        });
+    }
+
+    const [{ data: games, error: gamesErr }] = await Promise.all([gamesPromise, signPromise]);
+
     if (gamesErr) throw gamesErr;
 
-    res.json({ ...dateRow, games: games || [] });
+    res.json({ ...dateRow, games: games || [], photo_urls: photoUrls });
   } catch (err: any) {
     console.error("GET /dates/:id error:", err);
     res.status(500).json({ error: err.message });

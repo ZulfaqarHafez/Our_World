@@ -1,48 +1,16 @@
-import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, MapPin, Calendar as CalendarIcon, Pencil, Trash2, Trophy, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useDates } from "@/hooks/useDatesGames";
-import { apiFetch } from "@/lib/api";
+import { useDate, useDates } from "@/hooks/useDatesGames";
 import { Button } from "@/components/ui/button";
-import type { DateRow, GameRow } from "@/lib/types";
 
 const DateDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { fetchDate, deleteDate } = useDates();
-  const [dateEntry, setDateEntry] = useState<(DateRow & { games: GameRow[] }) | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
-  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  const { data: dateEntry, isLoading: loading, isError: notFound } = useDate(id);
+  const { deleteDate } = useDates();
 
-  useEffect(() => {
-    if (!id) return;
-    setLoading(true);
-    fetchDate(id)
-      .then((data) => setDateEntry(data))
-      .catch(() => setNotFound(true))
-      .finally(() => setLoading(false));
-  }, [id, fetchDate]);
-
-  // Fetch signed URLs for photos
-  useEffect(() => {
-    if (!dateEntry || !dateEntry.photos || dateEntry.photos.length === 0) {
-      setPhotoUrls([]);
-      return;
-    }
-    (async () => {
-      try {
-        const data = await apiFetch<{ urls: { path: string; signedUrl: string }[] }>("/api/photos/sign", {
-          method: "POST",
-          body: JSON.stringify({ paths: dateEntry.photos }),
-        });
-        setPhotoUrls(data.urls.map((u) => u.signedUrl).filter(Boolean));
-      } catch {
-        setPhotoUrls([]);
-      }
-    })();
-  }, [dateEntry]);
+  const photoUrls = dateEntry?.photo_urls ?? [];
 
   const handleDelete = async () => {
     if (!id || !confirm("Delete this date entry?")) return;

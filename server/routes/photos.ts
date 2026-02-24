@@ -120,16 +120,21 @@ photosRouter.post("/sign", async (req: Request, res: Response) => {
     const supabase = getSupabaseAdmin();
     const urls: { path: string; signedUrl: string }[] = [];
 
-    for (const p of paths) {
-      const { data, error } = await supabase.storage
-        .from("couple-photos")
-        .createSignedUrl(p, 300); // 5-minute expiry
+    // Batch sign all URLs at once instead of one-by-one
+    const { data, error } = await supabase.storage
+      .from("couple-photos")
+      .createSignedUrls(paths, 3600); // 1-hour expiry
 
-      if (error || !data) {
-        console.error(`Signed URL error for ${p}:`, error);
-        urls.push({ path: p, signedUrl: "" });
-      } else {
-        urls.push({ path: p, signedUrl: data.signedUrl });
+    if (error || !data) {
+      console.error("Batch signed URL error:", error);
+      // Fallback: return empty URLs
+      for (const p of paths) urls.push({ path: p, signedUrl: "" });
+    } else {
+      for (let i = 0; i < paths.length; i++) {
+        urls.push({
+          path: paths[i],
+          signedUrl: data[i]?.signedUrl || "",
+        });
       }
     }
 

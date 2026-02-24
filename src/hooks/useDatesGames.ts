@@ -1,72 +1,17 @@
-import { useState, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import type { DateRow, GameRow } from "@/lib/types";
 
-// ─── useDates ────────────────────────────────────────────────
+// ─── Extended types from server ──────────────────────────
 
-export function useDates() {
-  const [dates, setDates] = useState<DateRow[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const fetchDates = useCallback(async (search?: string) => {
-    setLoading(true);
-    try {
-      const params = search ? `?search=${encodeURIComponent(search)}` : "";
-      const data = await apiFetch<DateRow[]>(`/api/dates${params}`);
-      setDates(data);
-    } catch (err) {
-      console.error("Failed to fetch dates:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const fetchDate = useCallback(async (id: string) => {
-    const data = await apiFetch<DateRow & { games: GameRow[] }>(`/api/dates/${id}`);
-    return data;
-  }, []);
-
-  const createDate = useCallback(
-    async (values: {
-      title: string;
-      date: string;
-      location?: string;
-      description?: string;
-      mood?: string;
-      journal_entry?: string;
-      photos?: string[];
-    }) => {
-      const data = await apiFetch<DateRow>("/api/dates", {
-        method: "POST",
-        body: JSON.stringify(values),
-      });
-      setDates((prev) => [data, ...prev]);
-      return data;
-    },
-    []
-  );
-
-  const updateDate = useCallback(
-    async (id: string, values: Partial<Omit<DateRow, "id" | "created_by" | "created_at">>) => {
-      const data = await apiFetch<DateRow>(`/api/dates/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(values),
-      });
-      setDates((prev) => prev.map((d) => (d.id === id ? data : d)));
-      return data;
-    },
-    []
-  );
-
-  const deleteDate = useCallback(async (id: string) => {
-    await apiFetch(`/api/dates/${id}`, { method: "DELETE" });
-    setDates((prev) => prev.filter((d) => d.id !== id));
-  }, []);
-
-  return { dates, loading, fetchDates, fetchDate, createDate, updateDate, deleteDate };
+export interface DateWithCover extends DateRow {
+  cover_url?: string | null;
 }
 
-// ─── useGames ────────────────────────────────────────────────
+export interface DateWithDetails extends DateRow {
+  games: GameRow[];
+  photo_urls: string[];
+}
 
 export interface GameStats {
   zulWins: number;
@@ -79,35 +24,110 @@ export interface GameStats {
   leader: "Zul" | "Wendy" | null;
 }
 
-export function useGames() {
-  const [games, setGames] = useState<GameRow[]>([]);
-  const [stats, setStats] = useState<GameStats | null>(null);
-  const [loading, setLoading] = useState(false);
+// ─── useDates (list — cached, cover URLs included) ───────
 
-  const fetchGames = useCallback(async (category?: string) => {
-    setLoading(true);
-    try {
-      const params = category && category !== "All" ? `?category=${encodeURIComponent(category)}` : "";
-      const data = await apiFetch<GameRow[]>(`/api/games${params}`);
-      setGames(data);
-    } catch (err) {
-      console.error("Failed to fetch games:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+export function useDates(search?: string) {
+  const queryClient = useQueryClient();
 
-  const fetchStats = useCallback(async () => {
-    try {
-      const data = await apiFetch<GameStats>("/api/games/stats");
-      setStats(data);
-    } catch (err) {
-      console.error("Failed to fetch stats:", err);
-    }
-  }, []);
+  const { data: dates = [], isLoading: loading } = useQuery({
+    queryKey: ["dates", search || ""],
+    queryFn: () => {
+      const params = search ? `?search=${encodeURIComponent(search)}` : "";
+      return apiFetch<DateWithCover[]>(`/api/dates${params}`);
+    },
+  });
 
-  const createGame = useCallback(
-    async (values: {
+  const createMutation = useMutation({
+    mutationFn: (values: {
+      title: string;
+      date: string;
+      location?: string;
+      description?: string;
+      mood?: string;
+      journal_entry?: string;
+      photos?: string[];
+    }) =>
+      apiFetch<DateRow>("/api/dates", {
+        method: "POST",
+        body: JSON.stringify(values),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dates"] });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({
+      id,
+      values,
+    }: {
+      id: string;
+      values: Partial<Omit<DateRow, "id" | "created_by" | "created_at">>;
+    }) =>
+      apiFetch<DateRow>(`/api/dates/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(values),
+      }),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ["dates"] });
+      queryClient.invalidateQueries({ queryKey: ["date", id] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/api/dates/${id}`, { method: "DELETE" }),
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: ["dates"] });
+      queryClient.removeQueries({ queryKey: ["date", id] });
+    },
+  });
+
+  return {
+    dates,
+    loading,
+    createDate: createMutation.mutateAsync,
+    updateDate: (
+      id: string,
+      values: Partial<Omit<DateRow, "id" | "created_by" | "created_at">>
+    ) => updateMutation.mutateAsync({ id, values }),
+    deleteDate: deleteMutation.mutateAsync,
+  };
+}
+
+// ─── useDate (single — cached, photo_urls + games included) ─
+
+export function useDate(id: string | undefined) {
+  return useQuery({
+    queryKey: ["date", id],
+    queryFn: () => apiFetch<DateWithDetails>(`/api/dates/${id}`),
+    enabled: !!id,
+  });
+}
+
+// ─── useGames (list + stats — both cached) ───────────────
+
+export function useGames(category?: string) {
+  const queryClient = useQueryClient();
+
+  const { data: games = [], isLoading: loading } = useQuery({
+    queryKey: ["games", category || "All"],
+    queryFn: () => {
+      const params =
+        category && category !== "All"
+          ? `?category=${encodeURIComponent(category)}`
+          : "";
+      return apiFetch<GameRow[]>(`/api/games${params}`);
+    },
+  });
+
+  const { data: stats = null } = useQuery({
+    queryKey: ["gameStats"],
+    queryFn: () => apiFetch<GameStats>("/api/games/stats"),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (values: {
       game_name: string;
       game_category: string;
       winner: string;
@@ -116,33 +136,51 @@ export function useGames() {
       notes?: string;
       played_at?: string;
       date_id?: string;
-    }) => {
-      const data = await apiFetch<GameRow>("/api/games", {
+    }) =>
+      apiFetch<GameRow>("/api/games", {
         method: "POST",
         body: JSON.stringify(values),
-      });
-      setGames((prev) => [data, ...prev]);
-      return data;
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["games"] });
+      queryClient.invalidateQueries({ queryKey: ["gameStats"] });
     },
-    []
-  );
+  });
 
-  const updateGame = useCallback(
-    async (id: string, values: Partial<Omit<GameRow, "id">>) => {
-      const data = await apiFetch<GameRow>(`/api/games/${id}`, {
+  const updateMutation = useMutation({
+    mutationFn: ({
+      id,
+      values,
+    }: {
+      id: string;
+      values: Partial<Omit<GameRow, "id">>;
+    }) =>
+      apiFetch<GameRow>(`/api/games/${id}`, {
         method: "PUT",
         body: JSON.stringify(values),
-      });
-      setGames((prev) => prev.map((g) => (g.id === id ? data : g)));
-      return data;
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["games"] });
+      queryClient.invalidateQueries({ queryKey: ["gameStats"] });
     },
-    []
-  );
+  });
 
-  const deleteGame = useCallback(async (id: string) => {
-    await apiFetch(`/api/games/${id}`, { method: "DELETE" });
-    setGames((prev) => prev.filter((g) => g.id !== id));
-  }, []);
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/api/games/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["games"] });
+      queryClient.invalidateQueries({ queryKey: ["gameStats"] });
+    },
+  });
 
-  return { games, stats, loading, fetchGames, fetchStats, createGame, updateGame, deleteGame };
+  return {
+    games,
+    stats,
+    loading,
+    createGame: createMutation.mutateAsync,
+    updateGame: (id: string, values: Partial<Omit<GameRow, "id">>) =>
+      updateMutation.mutateAsync({ id, values }),
+    deleteGame: deleteMutation.mutateAsync,
+  };
 }

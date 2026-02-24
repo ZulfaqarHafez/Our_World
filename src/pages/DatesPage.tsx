@@ -6,7 +6,7 @@ import { useDates } from "@/hooks/useDatesGames";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { apiFetch, getAccessToken } from "@/lib/api";
+import { getAccessToken } from "@/lib/api";
 import datesHero from "@/assets/dates-hero.jpg";
 
 const container = {
@@ -20,7 +20,7 @@ const item = {
 };
 
 const DatesPage = () => {
-  const { dates, loading, fetchDates, createDate } = useDates();
+  const { dates, loading, createDate } = useDates();
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -36,34 +36,6 @@ const DatesPage = () => {
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Fetch on mount
-  useEffect(() => {
-    fetchDates();
-  }, [fetchDates]);
-
-  // Fetch signed URLs for cover photos
-  const [coverUrls, setCoverUrls] = useState<Record<string, string>>({});
-  useEffect(() => {
-    const paths = dates
-      .filter((d) => d.photos && d.photos.length > 0)
-      .map((d) => d.photos[0]);
-    if (paths.length === 0) return;
-
-    (async () => {
-      try {
-        const data = await apiFetch<{ urls: { path: string; signedUrl: string }[] }>("/api/photos/sign", {
-          method: "POST",
-          body: JSON.stringify({ paths }),
-        });
-        const map: Record<string, string> = {};
-        data.urls.forEach((u) => { if (u.signedUrl) map[u.path] = u.signedUrl; });
-        setCoverUrls(map);
-      } catch {
-        // silent — fallback to mood emoji
-      }
-    })();
-  }, [dates]);
 
   // Generate previews when files change
   useEffect(() => {
@@ -295,9 +267,9 @@ const DatesPage = () => {
             >
               {/* Visual header with photo or mood */}
               <div className="relative h-32 overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20">
-                {date.photos?.[0] && coverUrls[date.photos[0]] ? (
+                {date.cover_url ? (
                   <img
-                    src={coverUrls[date.photos[0]]}
+                    src={date.cover_url}
                     alt={date.title}
                     className="w-full h-full object-cover"
                   />
