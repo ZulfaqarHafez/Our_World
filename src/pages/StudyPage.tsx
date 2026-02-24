@@ -357,7 +357,7 @@ const StudyPage = () => {
                   onChange={handleFileUpload}
                 />
               </div>
-              <p className="text-[10px] text-muted-foreground">PDF, TXT, MD — max 10 MB</p>
+              <p className="text-[10px] text-muted-foreground">PDF, TXT, MD — max 4.5 MB</p>
 
               {/* Scope filter */}
               <div className="space-y-1">

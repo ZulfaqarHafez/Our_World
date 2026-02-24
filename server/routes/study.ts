@@ -12,7 +12,7 @@ import {
 
 export const studyRouter = Router();
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 4.5 * 1024 * 1024 } });
 
 // ─── Constants ───────────────────────────────────────────────
 
