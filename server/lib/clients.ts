@@ -23,8 +23,8 @@ export function getSupabaseAdmin(): SupabaseClient {
 
 export function getSupabaseForUser(accessToken: string): SupabaseClient {
   const url = process.env.SUPABASE_URL;
-  const anonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
-  if (!url || !anonKey) throw new Error("Missing Supabase config");
+  const anonKey = process.env.SUPABASE_ANON_KEY;
+  if (!url || !anonKey) throw new Error("Missing SUPABASE_URL or SUPABASE_ANON_KEY");
   return createClient(url, anonKey, {
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
   });
@@ -47,7 +47,7 @@ export function getOpenAI(): OpenAI {
 
 export async function getUserFromRequest(
   authHeader: string | undefined
-): Promise<{ id: string; email: string } | null> {
+): Promise<{ id: string; email: string; token: string } | null> {
   if (!authHeader?.startsWith("Bearer ")) return null;
   const token = authHeader.slice(7);
   const supabase = getSupabaseAdmin();
@@ -56,5 +56,5 @@ export async function getUserFromRequest(
     error,
   } = await supabase.auth.getUser(token);
   if (error || !user) return null;
-  return { id: user.id, email: user.email || "" };
+  return { id: user.id, email: user.email || "", token };
 }

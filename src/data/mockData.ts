@@ -21,7 +21,7 @@ export interface GameEntry {
   dateId?: string;
   gameName: string;
   gameCategory: "Card Game" | "Board Game" | "Mobile Game" | "Video Game" | "Sport" | "Other";
-  winner: "Zul" | "GF" | "Draw";
+  winner: "Zul" | "Wendy" | "Draw";
   scoreZul?: number;
   scoreGf?: number;
   notes?: string;
@@ -84,14 +84,14 @@ export const mockDates: DateEntry[] = [
 ];
 
 export const mockGames: GameEntry[] = [
-  { id: "1", dateId: "3", gameName: "Catan", gameCategory: "Board Game", winner: "GF", scoreZul: 8, scoreGf: 10, playedAt: "2026-01-25" },
+  { id: "1", dateId: "3", gameName: "Catan", gameCategory: "Board Game", winner: "Wendy", scoreZul: 8, scoreGf: 10, playedAt: "2026-01-25" },
   { id: "2", dateId: "3", gameName: "Uno", gameCategory: "Card Game", winner: "Zul", playedAt: "2026-01-25" },
-  { id: "3", gameName: "Mario Kart", gameCategory: "Video Game", winner: "GF", playedAt: "2026-02-01" },
+  { id: "3", gameName: "Mario Kart", gameCategory: "Video Game", winner: "Wendy", playedAt: "2026-02-01" },
   { id: "4", dateId: "1", gameName: "Beach Volleyball", gameCategory: "Sport", winner: "Zul", playedAt: "2026-02-14" },
-  { id: "5", gameName: "Wordle Race", gameCategory: "Mobile Game", winner: "GF", playedAt: "2026-02-10" },
+  { id: "5", gameName: "Wordle Race", gameCategory: "Mobile Game", winner: "Wendy", playedAt: "2026-02-10" },
   { id: "6", gameName: "Chess", gameCategory: "Board Game", winner: "Zul", playedAt: "2026-02-12" },
   { id: "7", gameName: "Exploding Kittens", gameCategory: "Card Game", winner: "Draw", playedAt: "2026-01-30" },
-  { id: "8", gameName: "Badminton", gameCategory: "Sport", winner: "GF", playedAt: "2026-02-20" },
+  { id: "8", gameName: "Badminton", gameCategory: "Sport", winner: "Wendy", playedAt: "2026-02-20" },
   { id: "9", gameName: "Overcooked 2", gameCategory: "Video Game", winner: "Draw", playedAt: "2026-02-05" },
-  { id: "10", gameName: "Scrabble", gameCategory: "Board Game", winner: "GF", scoreZul: 230, scoreGf: 285, playedAt: "2026-02-18" },
+  { id: "10", gameName: "Scrabble", gameCategory: "Board Game", winner: "Wendy", scoreZul: 230, scoreGf: 285, playedAt: "2026-02-18" },
 ];

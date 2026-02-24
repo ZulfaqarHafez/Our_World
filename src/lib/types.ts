@@ -18,7 +18,7 @@ export interface GameRow {
   date_id: string | null;
   game_name: string;
   game_category: GameCategory;
-  winner: "Zul" | "GF" | "Draw";
+  winner: "Zul" | "Wendy" | "Draw";
   score_zul: number | null;
   score_gf: number | null;
   notes: string | null;

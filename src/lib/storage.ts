@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 
 /**
  * Upload a photo to the private couple-photos bucket and return the storage path.
+ * Path is prefixed with the user's ID for ownership enforcement.
  */
 export async function uploadPhoto(
   file: File,
@@ -59,8 +60,16 @@ export async function getSignedPhotoUrls(
 
 /**
  * Delete a photo from storage.
+ * Validates that the path belongs to the current user before deleting.
  */
-export async function deletePhoto(storagePath: string): Promise<void> {
+export async function deletePhoto(storagePath: string, userId: string): Promise<void> {
+  // Ownership check: path must start with the user's ID
+  if (!storagePath.startsWith(`${userId}/`)) {
+    throw new Error("You can only delete your own photos");
+  }
+  if (storagePath.includes("..")) {
+    throw new Error("Invalid path");
+  }
   const { error } = await supabase.storage
     .from("couple-photos")
     .remove([storagePath]);

@@ -58,15 +58,52 @@ export function useDocuments(moduleName?: string) {
 
 // ─── useChat ─────────────────────────────────────────────────
 
-export function useChat() {
+export function useChat(moduleName?: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [conversationLoaded, setConversationLoaded] = useState(false);
   const [usage, setUsage] = useState<{
     queryCount: number;
-    costUsd: number;
     allowed: boolean;
     resetTime: string;
   } | null>(null);
+
+  // Save conversation to server (debounced via caller)
+  const saveConversation = useCallback(
+    async (msgs: ChatMessage[]) => {
+      if (!moduleName || msgs.length === 0) return;
+      try {
+        await apiFetch("/api/study/conversations", {
+          method: "PUT",
+          body: JSON.stringify({ module_name: moduleName, messages: msgs }),
+        });
+      } catch (err) {
+        console.error("Failed to save conversation:", err);
+      }
+    },
+    [moduleName]
+  );
+
+  // Load existing conversation on mount / module change
+  const loadConversation = useCallback(async () => {
+    if (!moduleName) return;
+    setConversationLoaded(false);
+    try {
+      const data = await apiFetch<{
+        id: string;
+        title: string;
+        messages: ChatMessage[];
+        updated_at: string;
+      } | null>(`/api/study/conversations?module=${encodeURIComponent(moduleName)}`);
+      if (data?.messages && data.messages.length > 0) {
+        setMessages(data.messages);
+      }
+    } catch (err) {
+      console.error("Failed to load conversation:", err);
+    } finally {
+      setConversationLoaded(true);
+    }
+  }, [moduleName]);
 
   const sendMessage = useCallback(
     async (question: string, documentId?: string) => {
@@ -79,7 +116,7 @@ export function useChat() {
         const result = await apiFetch<{
           answer: string;
           sources: { chunkIndex: number; content: string; documentName: string; similarity: number }[];
-          usage: { queryCount: number; costUsd: number; allowed: boolean; resetTime: string };
+          usage: { queryCount: number; allowed: boolean; resetTime: string };
         }>("/api/study/chat", {
           method: "POST",
           body: JSON.stringify({ question, document_id: documentId }),
@@ -90,7 +127,13 @@ export function useChat() {
           content: result.answer,
           sources: result.sources,
         };
-        setMessages((prev) => [...prev, assistantMsg]);
+
+        setMessages((prev) => {
+          const updated = [...prev, assistantMsg];
+          // Auto-save after each exchange
+          saveConversation(updated);
+          return updated;
+        });
         setUsage(result.usage);
       } catch (err: any) {
         const errorMsg: ChatMessage = {
@@ -102,16 +145,26 @@ export function useChat() {
         setIsLoading(false);
       }
     },
-    []
+    [saveConversation]
   );
 
-  const clearMessages = useCallback(() => setMessages([]), []);
+  const clearMessages = useCallback(async () => {
+    setMessages([]);
+    if (moduleName) {
+      try {
+        await apiFetch(`/api/study/conversations?module=${encodeURIComponent(moduleName)}`, {
+          method: "DELETE",
+        });
+      } catch (err) {
+        console.error("Failed to clear conversation:", err);
+      }
+    }
+  }, [moduleName]);
 
   const fetchUsage = useCallback(async () => {
     try {
       const data = await apiFetch<{
         queryCount: number;
-        costUsd: number;
         allowed: boolean;
         resetTime: string;
       }>("/api/study/usage");
@@ -121,7 +174,7 @@ export function useChat() {
     }
   }, []);
 
-  return { messages, isLoading, usage, sendMessage, clearMessages, fetchUsage };
+  return { messages, isLoading, usage, conversationLoaded, sendMessage, clearMessages, fetchUsage, loadConversation };
 }
 
 // ─── useVoiceInput ───────────────────────────────────────────

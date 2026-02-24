@@ -18,6 +18,8 @@ import {
   X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useDocuments, useChat, useVoiceInput } from "@/hooks/useStudy";
@@ -89,10 +91,12 @@ const StudyPage = () => {
     messages,
     isLoading: chatLoading,
     usage,
+    conversationLoaded,
     sendMessage,
     clearMessages,
     fetchUsage,
-  } = useChat();
+    loadConversation,
+  } = useChat(activeSubject || undefined);
 
   const { isListening, transcript, isSupported: voiceSupported, startListening, stopListening, resetTranscript } =
     useVoiceInput();
@@ -101,6 +105,13 @@ const StudyPage = () => {
   useEffect(() => {
     fetchDocuments();
   }, [fetchDocuments]);
+
+  // Load existing conversation when entering chat view
+  useEffect(() => {
+    if (view === "chat" && activeSubject) {
+      loadConversation();
+    }
+  }, [view, activeSubject, loadConversation]);
 
   // Fetch usage on mount
   useEffect(() => {
@@ -286,7 +297,6 @@ const StudyPage = () => {
             <button
               onClick={() => {
                 setView("subjects");
-                clearMessages();
                 setScopeToDoc(undefined);
               }}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
@@ -294,15 +304,30 @@ const StudyPage = () => {
               ← Back to subjects
             </button>
 
-            {/* Usage meter */}
-            {usage && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Clock className="h-3.5 w-3.5" />
-                <span>
-                  {usage.queryCount} / 50 queries · ${usage.costUsd.toFixed(4)} / $5.00
-                </span>
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              {messages.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-muted-foreground hover:text-destructive gap-1"
+                  onClick={() => {
+                    if (confirm("Clear this conversation?")) clearMessages();
+                  }}
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Clear chat
+                </Button>
+              )}
+              {/* Usage meter */}
+              {usage && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>
+                    {usage.queryCount} / 50 queries
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="grid md:grid-cols-3 gap-6 h-[calc(100vh-18rem)]">
@@ -332,6 +357,7 @@ const StudyPage = () => {
                   onChange={handleFileUpload}
                 />
               </div>
+              <p className="text-[10px] text-muted-foreground">PDF, TXT, MD — max 10 MB</p>
 
               {/* Scope filter */}
               <div className="space-y-1">
@@ -409,7 +435,11 @@ const StudyPage = () => {
             <div className="md:col-span-2 glass-card p-5 flex flex-col">
               {/* Messages */}
               <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                {messages.length === 0 ? (
+                {!conversationLoaded ? (
+                  <div className="h-full flex items-center justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : messages.length === 0 ? (
                   <div className="h-full flex items-center justify-center">
                     <div className="text-center text-muted-foreground">
                       <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-30" />
@@ -442,7 +472,7 @@ const StudyPage = () => {
                 <div className="bg-destructive/10 text-destructive text-sm rounded-lg px-4 py-3 mt-2 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   <span>
-                    Daily limit reached ({usage.queryCount}/50 queries, ${usage.costUsd.toFixed(4)} spent). Resets at midnight SGT.
+                    Daily limit reached ({usage.queryCount}/50 queries). Resets at midnight SGT.
                   </span>
                 </div>
               )}
@@ -522,7 +552,15 @@ function ChatBubble({ message }: { message: ChatMessage }) {
             : "bg-muted text-foreground rounded-bl-md"
         }`}
       >
-        <div className="whitespace-pre-wrap">{message.content}</div>
+        {isUser ? (
+          <div className="whitespace-pre-wrap">{message.content}</div>
+        ) : (
+          <div className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_h1]:text-base [&_h1]:font-bold [&_h1]:mt-3 [&_h1]:mb-1.5 [&_h2]:text-sm [&_h2]:font-bold [&_h2]:mt-2.5 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_strong]:font-bold [&_table]:my-2 [&_table]:text-xs [&_th]:px-2 [&_th]:py-1 [&_th]:border [&_th]:border-foreground/20 [&_th]:bg-foreground/5 [&_th]:font-semibold [&_td]:px-2 [&_td]:py-1 [&_td]:border [&_td]:border-foreground/10 [&_code]:text-xs [&_code]:bg-foreground/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_pre]:bg-foreground/10 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_blockquote]:border-l-2 [&_blockquote]:border-foreground/20 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:my-2 [&_hr]:my-3 [&_hr]:border-foreground/10">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        )}
 
         {/* Source attribution */}
         {message.sources && message.sources.length > 0 && (

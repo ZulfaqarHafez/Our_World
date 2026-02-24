@@ -1,7 +1,8 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Calendar, Gamepad2, BookOpen, Heart, ArrowRight, MapPin } from "lucide-react";
+import { Calendar, Gamepad2, BookOpen, Heart, ArrowRight, MapPin, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
-import { mockDates, mockGames } from "@/data/mockData";
+import { useDates, useGames } from "@/hooks/useDatesGames";
 import coupleIllustration from "@/assets/couple-illustration.jpg";
 
 const container = {
@@ -15,12 +16,20 @@ const item = {
 };
 
 const HomePage = () => {
-  const recentDates = mockDates.slice(0, 3);
-  const zulWins = mockGames.filter((g) => g.winner === "Zul").length;
-  const gfWins = mockGames.filter((g) => g.winner === "GF").length;
-  const total = mockGames.length;
-  const zulPct = total > 0 ? Math.round((zulWins / total) * 100) : 0;
-  const gfPct = total > 0 ? Math.round((gfWins / total) * 100) : 0;
+  const { dates, loading: datesLoading, fetchDates } = useDates();
+  const { stats, loading: gamesLoading, fetchStats } = useGames();
+
+  useEffect(() => {
+    fetchDates();
+    fetchStats();
+  }, [fetchDates, fetchStats]);
+
+  const recentDates = dates.slice(0, 3);
+  const zulWins = stats?.zulWins ?? 0;
+  const wendyWins = stats?.wendyWins ?? 0;
+  const total = stats?.total ?? 0;
+  const zulPct = stats?.zulPct ?? 0;
+  const wendyPct = stats?.wendyPct ?? 0;
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-8">
@@ -32,7 +41,7 @@ const HomePage = () => {
               Welcome back 💕
             </h1>
             <p className="text-primary-foreground/80 text-sm sm:text-base max-w-md">
-              Here's what's happening in our little world. {mockDates.length} dates logged, {mockGames.length} games played, and counting…
+              Here's what's happening in our little world. {dates.length} dates logged, {total} games played, and counting…
             </p>
           </div>
           <img
@@ -46,8 +55,8 @@ const HomePage = () => {
       {/* Stats */}
       <motion.div variants={item} className="grid grid-cols-3 gap-3 sm:gap-4">
         {[
-          { label: "Dates", value: mockDates.length.toString(), icon: Calendar, color: "text-primary", bg: "bg-primary/10" },
-          { label: "Games", value: mockGames.length.toString(), icon: Gamepad2, color: "text-accent", bg: "bg-accent/10" },
+          { label: "Dates", value: dates.length.toString(), icon: Calendar, color: "text-primary", bg: "bg-primary/10" },
+          { label: "Games", value: total.toString(), icon: Gamepad2, color: "text-accent", bg: "bg-accent/10" },
           { label: "Memories", value: "∞", icon: Heart, color: "text-primary", bg: "bg-primary/10" },
         ].map((stat) => (
           <div key={stat.label} className="glass-card p-4 sm:p-5 text-center group hover:shadow-md transition-shadow">
@@ -69,33 +78,31 @@ const HomePage = () => {
           </Link>
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
-          {recentDates.map((date, i) => (
+          {recentDates.length === 0 && !datesLoading ? (
+            <div className="sm:col-span-3 text-center py-8 text-muted-foreground">
+              <p className="text-sm">No dates logged yet. Start your first adventure!</p>
+            </div>
+          ) : recentDates.map((date) => (
             <Link
               key={date.id}
               to={`/dates/${date.id}`}
               className="group block rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300"
             >
-              <div className="relative h-40 overflow-hidden">
-                {date.coverImage ? (
-                  <img
-                    src={date.coverImage}
-                    alt={date.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                ) : (
-                  <div className="w-full h-full bg-muted flex items-center justify-center">
-                    <span className="text-4xl">{date.mood}</span>
-                  </div>
-                )}
+              <div className="relative h-40 overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20">
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-5xl opacity-30">{date.mood || "💕"}</span>
+                </div>
                 <div className="absolute inset-0 bg-gradient-to-t from-foreground/60 to-transparent" />
                 <div className="absolute bottom-3 left-3 right-3">
                   <h3 className="font-serif text-base font-semibold text-primary-foreground truncate">{date.title}</h3>
-                  <p className="text-xs text-primary-foreground/80 flex items-center gap-1 mt-0.5">
-                    <MapPin className="h-3 w-3" />
-                    {date.location}
-                  </p>
+                  {date.location && (
+                    <p className="text-xs text-primary-foreground/80 flex items-center gap-1 mt-0.5">
+                      <MapPin className="h-3 w-3" />
+                      {date.location}
+                    </p>
+                  )}
                 </div>
-                <span className="absolute top-3 right-3 text-lg">{date.mood}</span>
+                <span className="absolute top-3 right-3 text-lg">{date.mood || "💕"}</span>
               </div>
             </Link>
           ))}
@@ -120,17 +127,17 @@ const HomePage = () => {
               <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">vs</div>
             </div>
             <div className="text-center flex-1">
-              <div className="font-serif text-3xl font-bold text-primary">{gfWins}</div>
-              <div className="text-sm text-muted-foreground mt-1">GF</div>
+              <div className="font-serif text-3xl font-bold text-primary">{wendyWins}</div>
+              <div className="text-sm text-muted-foreground mt-1">Wendy</div>
             </div>
           </div>
           <div className="h-3 rounded-full bg-muted overflow-hidden flex">
             <div className="gradient-gold h-full rounded-l-full transition-all duration-700" style={{ width: `${zulPct}%` }} />
-            <div className="gradient-rose h-full rounded-r-full transition-all duration-700" style={{ width: `${gfPct}%` }} />
+            <div className="gradient-rose h-full rounded-r-full transition-all duration-700" style={{ width: `${wendyPct}%` }} />
           </div>
           <div className="flex justify-between text-xs text-muted-foreground mt-2">
             <span>{zulPct}%</span>
-            <span>{gfPct}%</span>
+            <span>{wendyPct}%</span>
           </div>
         </div>
       </motion.div>

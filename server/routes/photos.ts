@@ -3,6 +3,8 @@ import { getSupabaseAdmin, getUserFromRequest } from "../lib/clients.js";
 
 export const photosRouter = Router();
 
+const MAX_PATHS = 50;
+
 // ─── POST /api/photos/sign — Generate signed URLs ───────────
 // Accepts: { paths: string[] }
 // Returns: { urls: [{ path, signedUrl }] }
@@ -15,6 +17,23 @@ photosRouter.post("/sign", async (req: Request, res: Response) => {
     const { paths } = req.body;
     if (!Array.isArray(paths) || paths.length === 0) {
       return res.status(400).json({ error: "Provide an array of storage paths" });
+    }
+
+    if (paths.length > MAX_PATHS) {
+      return res.status(400).json({ error: `Maximum ${MAX_PATHS} paths per request` });
+    }
+
+    // Validate all paths belong to the requesting user and have no traversal
+    for (const p of paths) {
+      if (typeof p !== "string") {
+        return res.status(400).json({ error: "All paths must be strings" });
+      }
+      if (p.includes("..") || p.startsWith("/")) {
+        return res.status(400).json({ error: "Invalid path detected" });
+      }
+      if (!p.startsWith(`${user.id}/`)) {
+        return res.status(403).json({ error: "You can only access your own photos" });
+      }
     }
 
     const supabase = getSupabaseAdmin();

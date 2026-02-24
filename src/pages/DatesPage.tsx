@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Plus, MapPin, Search } from "lucide-react";
-import { motion } from "framer-motion";
-import { mockDates } from "@/data/mockData";
+import { Plus, MapPin, Search, Loader2, X, Calendar as CalendarIcon } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useDates } from "@/hooks/useDatesGames";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import datesHero from "@/assets/dates-hero.jpg";
 
 const container = {
@@ -18,13 +19,50 @@ const item = {
 };
 
 const DatesPage = () => {
+  const { dates, loading, fetchDates, createDate } = useDates();
   const [search, setSearch] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    title: "",
+    date: new Date().toISOString().split("T")[0],
+    location: "",
+    description: "",
+    mood: "",
+    journal_entry: "",
+  });
 
-  const filtered = mockDates.filter(
+  // Fetch on mount
+  useEffect(() => {
+    fetchDates();
+  }, [fetchDates]);
+
+  const filtered = dates.filter(
     (d) =>
       d.title.toLowerCase().includes(search.toLowerCase()) ||
       d.location.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleCreate = async () => {
+    if (!form.title.trim() || !form.date) return;
+    setSaving(true);
+    try {
+      await createDate({
+        title: form.title,
+        date: form.date,
+        location: form.location,
+        description: form.description,
+        mood: form.mood || undefined,
+        journal_entry: form.journal_entry || undefined,
+      });
+      setShowAdd(false);
+      setForm({ title: "", date: new Date().toISOString().split("T")[0], location: "", description: "", mood: "", journal_entry: "" });
+    } catch (err: any) {
+      console.error("Create failed:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -37,12 +75,74 @@ const DatesPage = () => {
             <h1 className="font-serif text-3xl sm:text-4xl font-bold text-primary-foreground">Date Log</h1>
             <p className="text-primary-foreground/80 text-sm mt-1">All our adventures, captured forever</p>
           </div>
-          <Button className="gradient-rose text-primary-foreground gap-2 shadow-lg">
+          <Button className="gradient-rose text-primary-foreground gap-2 shadow-lg" onClick={() => setShowAdd(true)}>
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">New Date</span>
           </Button>
         </div>
       </div>
+
+      {/* Add new date form */}
+      <AnimatePresence>
+        {showAdd && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="glass-card p-5 space-y-4"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="font-serif text-lg font-semibold text-foreground">Log a New Date</h2>
+              <button onClick={() => setShowAdd(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Input
+                placeholder="Title *"
+                value={form.title}
+                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              />
+              <Input
+                type="date"
+                value={form.date}
+                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+              />
+              <Input
+                placeholder="Location"
+                value={form.location}
+                onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
+              />
+              <Input
+                placeholder="Mood emoji (e.g. 🥰)"
+                value={form.mood}
+                onChange={(e) => setForm((f) => ({ ...f, mood: e.target.value }))}
+                maxLength={4}
+              />
+            </div>
+            <Textarea
+              placeholder="Description"
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              rows={2}
+            />
+            <Textarea
+              placeholder="Journal entry (optional)"
+              value={form.journal_entry}
+              onChange={(e) => setForm((f) => ({ ...f, journal_entry: e.target.value }))}
+              rows={3}
+            />
+            <Button
+              className="gradient-rose text-primary-foreground w-full"
+              disabled={!form.title.trim() || saving}
+              onClick={handleCreate}
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Save Date
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Search */}
       <div className="relative">
@@ -55,7 +155,13 @@ const DatesPage = () => {
         />
       </div>
 
-      {/* Cards with images */}
+      {/* Cards */}
+      {loading && dates.length === 0 ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <>
       <motion.div variants={container} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-2">
         {filtered.map((date) => (
           <motion.div key={date.id} variants={item}>
@@ -63,46 +169,57 @@ const DatesPage = () => {
               to={`/dates/${date.id}`}
               className="block rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 group bg-card"
             >
-              {/* Cover image */}
-              {date.coverImage && (
-                <div className="relative h-44 overflow-hidden">
-                  <img
-                    src={date.coverImage}
-                    alt={date.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-foreground/40 to-transparent" />
-                  <span className="absolute top-3 right-3 text-xl bg-card/80 backdrop-blur-sm rounded-full h-9 w-9 flex items-center justify-center">
-                    {date.mood}
-                  </span>
-                  <div className="absolute bottom-3 left-3">
-                    <span className="text-xs bg-primary-foreground/90 text-foreground px-2 py-1 rounded-full font-medium">
-                      {new Date(date.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                    </span>
-                  </div>
+              {/* Visual header with mood */}
+              <div className="relative h-32 overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20">
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-5xl opacity-40">{date.mood || "💕"}</span>
                 </div>
-              )}
+                <span className="absolute top-3 right-3 text-xl bg-card/80 backdrop-blur-sm rounded-full h-9 w-9 flex items-center justify-center">
+                  {date.mood || "💕"}
+                </span>
+                <div className="absolute bottom-3 left-3">
+                  <span className="text-xs bg-primary-foreground/90 text-foreground px-2 py-1 rounded-full font-medium">
+                    {new Date(date.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                  </span>
+                </div>
+              </div>
               {/* Text */}
               <div className="p-4">
                 <h3 className="font-serif text-lg font-semibold text-foreground group-hover:text-primary transition-colors">
                   {date.title}
                 </h3>
-                <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
-                  <MapPin className="h-3 w-3" />
-                  {date.location}
-                </div>
-                <p className="text-sm text-foreground/70 mt-2 line-clamp-2">{date.description}</p>
+                {date.location && (
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+                    <MapPin className="h-3 w-3" />
+                    {date.location}
+                  </div>
+                )}
+                {date.description && (
+                  <p className="text-sm text-foreground/70 mt-2 line-clamp-2">{date.description}</p>
+                )}
               </div>
             </Link>
           </motion.div>
         ))}
       </motion.div>
 
-      {filtered.length === 0 && (
+      {filtered.length === 0 && !loading && (
         <div className="text-center py-16 text-muted-foreground">
-          <p className="text-lg">No dates found 😢</p>
-          <p className="text-sm mt-1">Try a different search or add a new date!</p>
+          {dates.length === 0 ? (
+            <>
+              <CalendarIcon className="h-12 w-12 mx-auto mb-4 opacity-30" />
+              <p className="text-lg">No dates logged yet</p>
+              <p className="text-sm mt-1">Tap "New Date" to capture your first adventure!</p>
+            </>
+          ) : (
+            <>
+              <p className="text-lg">No dates found 😢</p>
+              <p className="text-sm mt-1">Try a different search!</p>
+            </>
+          )}
         </div>
+      )}
+        </>
       )}
     </div>
   );
