@@ -8,11 +8,13 @@ import {
   Plus,
   FolderOpen,
   ChevronRight,
+  ChevronDown,
   FileText,
   Trash2,
   Loader2,
   Send,
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   Clock,
   X,
@@ -538,6 +540,7 @@ const StudyPage = () => {
 
 function ChatBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
+  const [sourcesExpanded, setSourcesExpanded] = useState(false);
 
   return (
     <motion.div
@@ -552,6 +555,14 @@ function ChatBubble({ message }: { message: ChatMessage }) {
             : "bg-muted text-foreground rounded-bl-md"
         }`}
       >
+        {/* Low-confidence warning */}
+        {message.low_confidence && (
+          <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 rounded-lg px-3 py-2 mb-2">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            <span>Low confidence — the retrieved context may not fully cover this topic.</span>
+          </div>
+        )}
+
         {isUser ? (
           <div className="whitespace-pre-wrap">{message.content}</div>
         ) : (
@@ -562,14 +573,40 @@ function ChatBubble({ message }: { message: ChatMessage }) {
           </div>
         )}
 
-        {/* Source attribution */}
+        {/* Source citations with expandable details */}
         {message.sources && message.sources.length > 0 && (
           <div className="mt-3 pt-3 border-t border-foreground/10">
-            <p className="text-xs font-medium opacity-70 mb-1.5">Sources:</p>
-            <div className="space-y-1">
+            <button
+              onClick={() => setSourcesExpanded(!sourcesExpanded)}
+              className="flex items-center gap-1.5 text-xs font-medium opacity-70 hover:opacity-100 transition-opacity w-full text-left"
+            >
+              {sourcesExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              <span>{message.sources.length} source{message.sources.length > 1 ? "s" : ""} referenced</span>
+            </button>
+
+            {/* Always show source names */}
+            <div className="mt-1.5 space-y-1">
               {message.sources.map((s, i) => (
-                <div key={i} className="text-xs opacity-60">
-                  📄 {s.documentName} (chunk {s.chunkIndex})
+                <div key={i} className="text-xs">
+                  <div className="flex items-center gap-2 opacity-70">
+                    <span>📄 {s.documentName}</span>
+                    <span className="text-[10px] opacity-50">chunk {s.chunkIndex}</span>
+                    {s.similarity !== undefined && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                        s.similarity >= 0.7 ? "bg-green-500/15 text-green-600 dark:text-green-400" :
+                        s.similarity >= 0.5 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" :
+                        "bg-red-500/15 text-red-500"
+                      }`}>
+                        {Math.round(s.similarity * 100)}% match
+                      </span>
+                    )}
+                  </div>
+                  {/* Expandable content preview */}
+                  {sourcesExpanded && s.content && (
+                    <div className="mt-1 ml-5 p-2 rounded bg-foreground/5 text-[11px] leading-relaxed opacity-60 whitespace-pre-wrap">
+                      {s.content}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

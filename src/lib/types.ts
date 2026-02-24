@@ -77,7 +77,14 @@ export interface ApiUsageRow {
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
-  sources?: { chunkIndex: number; content: string; documentName: string }[];
+  sources?: {
+    chunkIndex: number;
+    content: string;
+    documentName: string;
+    similarity?: number;
+    combinedScore?: number;
+  }[];
+  low_confidence?: boolean;
 }
 
 // ─── Storage types ────────────────────────────────────────

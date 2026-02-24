@@ -2,6 +2,8 @@ import { useState, useCallback, useRef } from "react";
 import { apiFetch } from "@/lib/api";
 import type { ChatMessage, DocumentRow } from "@/lib/types";
 
+const CHAT_HISTORY_TURNS = 5;
+
 // ─── useDocuments ────────────────────────────────────────────
 
 export function useDocuments(moduleName?: string) {
@@ -109,23 +111,36 @@ export function useChat(moduleName?: string) {
     async (question: string, documentId?: string) => {
       // Add user message
       const userMsg: ChatMessage = { role: "user", content: question };
-      setMessages((prev) => [...prev, userMsg]);
+      const updatedMessages = [...messages, userMsg];
+      setMessages(updatedMessages);
       setIsLoading(true);
 
       try {
+        // Build chat history from recent messages for conversation memory
+        const recentHistory = updatedMessages
+          .slice(-CHAT_HISTORY_TURNS * 2)
+          .map((m) => ({ role: m.role, content: m.content }));
+
         const result = await apiFetch<{
           answer: string;
-          sources: { chunkIndex: number; content: string; documentName: string; similarity: number }[];
+          sources: { chunkIndex: number; content: string; documentName: string; similarity: number; combinedScore?: number }[];
           usage: { queryCount: number; allowed: boolean; resetTime: string };
+          low_confidence?: boolean;
         }>("/api/study/chat", {
           method: "POST",
-          body: JSON.stringify({ question, document_id: documentId }),
+          body: JSON.stringify({
+            question,
+            document_id: documentId,
+            module_name: moduleName,
+            chat_history: recentHistory,
+          }),
         });
 
         const assistantMsg: ChatMessage = {
           role: "assistant",
           content: result.answer,
           sources: result.sources,
+          low_confidence: result.low_confidence,
         };
 
         setMessages((prev) => {
