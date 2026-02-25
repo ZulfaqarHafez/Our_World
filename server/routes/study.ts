@@ -400,6 +400,7 @@ studyRouter.post("/chat", async (req: Request, res: Response) => {
         match_count: MAX_CHUNKS_TO_LLM,
         filter_document_id: document_id || null,
         filter_user_id: user.id,
+        filter_module: module_name || null,
       });
       matches = fallback.data || [];
       matchErr = fallback.error;
