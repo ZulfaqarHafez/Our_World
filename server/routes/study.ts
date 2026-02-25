@@ -217,7 +217,19 @@ studyRouter.post("/ingest", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Document contains too little text to process." });
     }
 
-    // 3. Create document record
+    // 3. Deduplicate: check if this storage_path was already ingested
+    const { data: existing } = await supabase
+      .from("documents")
+      .select("id")
+      .eq("file_path", storage_path)
+      .eq("uploaded_by", user.id)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      return res.status(409).json({ error: "This file has already been uploaded." });
+    }
+
+    // 4. Create document record
     const { data: doc, error: docErr } = await supabase
       .from("documents")
       .insert({

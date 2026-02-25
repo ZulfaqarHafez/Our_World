@@ -10,6 +10,7 @@ const CHAT_HISTORY_TURNS = 5;
 export function useDocuments(moduleName?: string) {
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const fetchDocuments = useCallback(async () => {
     setLoading(true);
@@ -26,47 +27,57 @@ export function useDocuments(moduleName?: string) {
 
   const uploadDocument = useCallback(
     async (file: File, moduleNameOverride?: string) => {
-      const moduleName_ = moduleNameOverride || moduleName || "General";
+      if (uploading) throw new Error("Upload already in progress");
+      setUploading(true);
 
-      // 1. Get current user id for storage path
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      // 2. Upload file directly to Supabase Storage (bypasses Vercel 4.5MB body limit)
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const storagePath = `${user.id}/${Date.now()}_${safeName}`;
-      const { error: uploadErr } = await supabase.storage
-        .from("lecture-materials")
-        .upload(storagePath, file, { contentType: file.type });
-
-      if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
-
-      // 3. Tell the server to process the uploaded file (tiny JSON body)
       try {
-        const result = await apiFetch<{ message: string; document: DocumentRow }>(
-          "/api/study/ingest",
-          {
-            method: "POST",
-            body: JSON.stringify({
-              storage_path: storagePath,
-              filename: file.name,
-              mime_type: file.type,
-              module_name: moduleName_,
-            }),
-          }
-        );
+        const moduleName_ = moduleNameOverride || moduleName || "General";
 
-        // Add the new document optimistically (status: processing)
-        setDocuments((prev) => [result.document, ...prev]);
+        // 1. Get current user id for storage path
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Not authenticated");
 
-        return result;
-      } catch (ingestErr) {
-        // Clean up orphaned file from storage if ingest failed
-        await supabase.storage.from("lecture-materials").remove([storagePath]);
-        throw ingestErr;
+        // 2. Upload file directly to Supabase Storage (bypasses Vercel 4.5MB body limit)
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const storagePath = `${user.id}/${Date.now()}_${safeName}`;
+        const { error: uploadErr } = await supabase.storage
+          .from("lecture-materials")
+          .upload(storagePath, file, { contentType: file.type });
+
+        if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
+
+        // 3. Tell the server to process the uploaded file (tiny JSON body)
+        try {
+          const result = await apiFetch<{ message: string; document: DocumentRow }>(
+            "/api/study/ingest",
+            {
+              method: "POST",
+              body: JSON.stringify({
+                storage_path: storagePath,
+                filename: file.name,
+                mime_type: file.type,
+                module_name: moduleName_,
+              }),
+            }
+          );
+
+          // Add the new document optimistically (status: processing)
+          setDocuments((prev) => {
+            if (prev.some((d) => d.id === result.document.id)) return prev;
+            return [result.document, ...prev];
+          });
+
+          return result;
+        } catch (ingestErr) {
+          // Clean up orphaned file from storage if ingest failed
+          await supabase.storage.from("lecture-materials").remove([storagePath]);
+          throw ingestErr;
+        }
+      } finally {
+        setUploading(false);
       }
     },
-    [moduleName]
+    [moduleName, uploading]
   );
 
   const deleteDocument = useCallback(async (docId: string) => {
@@ -83,11 +94,13 @@ export function useDocuments(moduleName?: string) {
   );
 
   // Auto-poll when any document is still processing (check every 4s)
-  useEffect(() => {
-    const hasProcessing = documents.some((d) => d.status === "processing");
-    if (!hasProcessing) return;
+  // Use a ref to track processing state to avoid re-creating the interval on every documents change
+  const hasProcessingRef = useRef(false);
+  hasProcessingRef.current = documents.some((d) => d.status === "processing");
 
+  useEffect(() => {
     const interval = setInterval(async () => {
+      if (!hasProcessingRef.current) return;
       try {
         const params = moduleName ? `?module=${encodeURIComponent(moduleName)}` : "";
         const data = await apiFetch<DocumentRow[]>(`/api/study/documents${params}`);
@@ -98,9 +111,9 @@ export function useDocuments(moduleName?: string) {
     }, 4000);
 
     return () => clearInterval(interval);
-  }, [documents, moduleName]);
+  }, [moduleName]);
 
-  return { documents, loading, fetchDocuments, uploadDocument, deleteDocument, refreshDocument };
+  return { documents, loading, uploading, fetchDocuments, uploadDocument, deleteDocument, refreshDocument };
 }
 
 // ─── useChat ─────────────────────────────────────────────────

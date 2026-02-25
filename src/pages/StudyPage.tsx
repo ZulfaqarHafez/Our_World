@@ -137,6 +137,7 @@ const StudyPage = () => {
   const {
     documents,
     loading: docsLoading,
+    uploading,
     fetchDocuments,
     uploadDocument,
     deleteDocument,
@@ -477,9 +478,14 @@ const StudyPage = () => {
                   size="sm"
                   className="gap-1.5"
                   onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
                 >
-                  <Upload className="h-3.5 w-3.5" />
-                  Upload
+                  {uploading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="h-3.5 w-3.5" />
+                  )}
+                  {uploading ? "Uploading..." : "Upload"}
                 </Button>
                 <input
                   ref={fileInputRef}
@@ -636,7 +642,7 @@ const StudyPage = () => {
                 )}
               </AnimatePresence>
 
-              {/* Messages */}}
+              {/* Messages */}
               <div className="flex-1 overflow-y-auto space-y-4 pr-2">
                 {!conversationLoaded ? (
                   <div className="h-full flex items-center justify-center">
