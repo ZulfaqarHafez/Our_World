@@ -91,14 +91,17 @@ CREATE OR REPLACE FUNCTION match_documents(
   query_embedding vector(1536),
   match_count int DEFAULT 5,
   filter_document_id uuid DEFAULT NULL,
-  filter_user_id uuid DEFAULT NULL
+  filter_user_id uuid DEFAULT NULL,
+  filter_module text DEFAULT NULL
 )
 RETURNS TABLE (
   id uuid,
   document_id uuid,
   content text,
   chunk_index int,
-  similarity float
+  similarity float,
+  module_name text,
+  document_filename text
 )
 LANGUAGE plpgsql
 AS $$
@@ -109,12 +112,15 @@ BEGIN
     dc.document_id,
     dc.content,
     dc.chunk_index,
-    1 - (dc.embedding <=> query_embedding) AS similarity
+    1 - (dc.embedding <=> query_embedding) AS similarity,
+    dc.module_name,
+    dc.document_filename
   FROM document_chunks dc
   JOIN documents d ON d.id = dc.document_id
   WHERE
     (filter_document_id IS NULL OR dc.document_id = filter_document_id)
     AND (filter_user_id IS NULL OR d.uploaded_by = filter_user_id)
+    AND (filter_module IS NULL OR dc.module_name = filter_module)
   ORDER BY dc.embedding <=> query_embedding
   LIMIT match_count;
 END;

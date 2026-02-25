@@ -430,6 +430,17 @@ studyRouter.post("/chat", async (req: Request, res: Response) => {
 
     console.log(`[chat] Found ${matches.length} chunks, modules: [${matches.map((m: any) => m.module_name).join(", ")}]`);
 
+    // ── 3b. Server-side safety net: ALWAYS filter by module_name in code
+    //        This prevents cross-subject contamination even if the DB function
+    //        falls through to an unfiltered fallback.
+    if (module_name && matches.length > 0) {
+      const beforeCount = matches.length;
+      matches = matches.filter((m: any) => m.module_name === module_name);
+      if (matches.length < beforeCount) {
+        console.log(`[chat] Server-side module filter: ${beforeCount} → ${matches.length} (kept only module="${module_name}")`);
+      }
+    }
+
     if (matchErr) {
       console.error("Match error:", matchErr);
       return res.status(500).json({ error: "Failed to search documents" });
