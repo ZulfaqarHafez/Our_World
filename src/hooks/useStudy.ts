@@ -82,38 +82,23 @@ export function useDocuments(moduleName?: string) {
     [fetchDocuments]
   );
 
-  // Supabase Realtime: auto-update documents on DB changes
+  // Auto-poll when any document is still processing (check every 4s)
   useEffect(() => {
-    const channel = supabase
-      .channel("documents-realtime")
-      .on(
-        "postgres_changes" as any,
-        { event: "*", schema: "public", table: "documents" },
-        (payload: any) => {
-          if (payload.eventType === "UPDATE") {
-            const updated = payload.new as DocumentRow;
-            setDocuments((prev) =>
-              prev.map((d) => (d.id === updated.id ? { ...d, ...updated } : d))
-            );
-          } else if (payload.eventType === "INSERT") {
-            const inserted = payload.new as DocumentRow;
-            setDocuments((prev) => {
-              // Avoid duplicates (optimistic insert may already have it)
-              if (prev.some((d) => d.id === inserted.id)) return prev;
-              return [inserted, ...prev];
-            });
-          } else if (payload.eventType === "DELETE") {
-            const deleted = payload.old as { id: string };
-            setDocuments((prev) => prev.filter((d) => d.id !== deleted.id));
-          }
-        }
-      )
-      .subscribe();
+    const hasProcessing = documents.some((d) => d.status === "processing");
+    if (!hasProcessing) return;
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
+    const interval = setInterval(async () => {
+      try {
+        const params = moduleName ? `?module=${encodeURIComponent(moduleName)}` : "";
+        const data = await apiFetch<DocumentRow[]>(`/api/study/documents${params}`);
+        setDocuments(data);
+      } catch {
+        // Silently ignore polling errors
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [documents, moduleName]);
 
   return { documents, loading, fetchDocuments, uploadDocument, deleteDocument, refreshDocument };
 }
