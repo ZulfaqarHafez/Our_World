@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   BookOpen,
   Upload,
@@ -24,6 +24,9 @@ import {
   HelpCircle,
   Copy,
   Check,
+  Search,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
@@ -121,8 +124,13 @@ const StudyPage = () => {
   const [showNewSubject, setShowNewSubject] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [scopeToDoc, setScopeToDoc] = useState<string | undefined>(undefined);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeMatchIndex, setActiveMatchIndex] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   // Hooks — always fetch ALL documents so the subject list stays complete.
   // We filter to the active subject in derived state below.
@@ -174,6 +182,52 @@ const StudyPage = () => {
   useEffect(() => {
     if (transcript) setChatInput(transcript);
   }, [transcript]);
+
+  // Focus search input when opened
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
+
+  // Search: find matching message indices
+  const searchMatches = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return messages
+      .map((msg, i) => (msg.content.toLowerCase().includes(q) ? i : -1))
+      .filter((i) => i !== -1);
+  }, [messages, searchQuery]);
+
+  // Scroll to active match
+  useEffect(() => {
+    if (searchMatches.length > 0 && activeMatchIndex < searchMatches.length) {
+      const msgIdx = searchMatches[activeMatchIndex];
+      const el = messageRefs.current.get(msgIdx);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [activeMatchIndex, searchMatches]);
+
+  // Reset match index when query changes
+  useEffect(() => {
+    setActiveMatchIndex(0);
+  }, [searchQuery]);
+
+  const navigateMatch = useCallback(
+    (direction: "prev" | "next") => {
+      if (searchMatches.length === 0) return;
+      setActiveMatchIndex((prev) =>
+        direction === "next"
+          ? (prev + 1) % searchMatches.length
+          : (prev - 1 + searchMatches.length) % searchMatches.length
+      );
+    },
+    [searchMatches.length]
+  );
+
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setSearchQuery("");
+    setActiveMatchIndex(0);
+  }, []);
 
   // Derived
   const subjects = deriveSubjects(documents);
@@ -373,17 +427,28 @@ const StudyPage = () => {
 
             <div className="flex items-center gap-3">
               {messages.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs text-muted-foreground hover:text-destructive gap-1"
-                  onClick={() => {
-                    if (confirm("Clear this conversation?")) clearMessages();
-                  }}
-                >
-                  <Trash2 className="h-3 w-3" />
-                  Clear chat
-                </Button>
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={`text-xs gap-1 ${searchOpen ? 'text-primary' : 'text-muted-foreground'}`}
+                    onClick={() => searchOpen ? closeSearch() : setSearchOpen(true)}
+                  >
+                    <Search className="h-3 w-3" />
+                    Search
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-muted-foreground hover:text-destructive gap-1"
+                    onClick={() => {
+                      if (confirm("Clear this conversation?")) clearMessages();
+                    }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Clear chat
+                  </Button>
+                </>
               )}
               {/* Usage meter */}
               {usage && (
@@ -514,7 +579,64 @@ const StudyPage = () => {
 
             {/* ── Chat area ── */}
             <div className="md:col-span-2 glass-card p-5 flex flex-col">
-              {/* Messages */}
+              {/* Search bar */}
+              <AnimatePresence>
+                {searchOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mb-3"
+                  >
+                    <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2 border border-border">
+                      <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        placeholder="Search in conversation..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") navigateMatch(e.shiftKey ? "prev" : "next");
+                          if (e.key === "Escape") closeSearch();
+                        }}
+                        className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                      />
+                      {searchQuery && (
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {searchMatches.length > 0
+                            ? `${activeMatchIndex + 1} / ${searchMatches.length}`
+                            : "No matches"}
+                        </span>
+                      )}
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          onClick={() => navigateMatch("prev")}
+                          disabled={searchMatches.length === 0}
+                          className="p-1 rounded hover:bg-foreground/10 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                        >
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => navigateMatch("next")}
+                          disabled={searchMatches.length === 0}
+                          className="p-1 rounded hover:bg-foreground/10 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                        >
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <button
+                        onClick={closeSearch}
+                        className="p-1 rounded hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Messages */}}
               <div className="flex-1 overflow-y-auto space-y-4 pr-2">
                 {!conversationLoaded ? (
                   <div className="h-full flex items-center justify-center">
@@ -573,7 +695,22 @@ const StudyPage = () => {
                   </div>
                 ) : (
                   messages.map((msg, i) => (
-                    <ChatBubble key={i} message={msg} />
+                    <div
+                      key={i}
+                      ref={(el) => { if (el) messageRefs.current.set(i, el); }}
+                      className={`transition-opacity duration-200 ${
+                        searchQuery && !searchMatches.includes(i) ? "opacity-30" : ""
+                      } ${
+                        searchQuery && searchMatches[activeMatchIndex] === i
+                          ? "ring-2 ring-primary/40 rounded-2xl"
+                          : ""
+                      }`}
+                    >
+                      <ChatBubble
+                        message={msg}
+                        searchQuery={searchQuery}
+                      />
+                    </div>
                   ))
                 )}
                 {chatLoading && (
@@ -652,9 +789,29 @@ const StudyPage = () => {
   );
 };
 
+// ─── Highlight helper ────────────────────────────────────────
+
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  if (!query.trim()) return <>{text}</>;
+  const parts = text.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi"));
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === query.toLowerCase() ? (
+          <mark key={i} className="bg-yellow-300/60 dark:bg-yellow-500/30 text-inherit rounded-sm px-0.5">
+            {part}
+          </mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
+}
+
 // ─── Chat Bubble Component ───────────────────────────────────
 
-function ChatBubble({ message }: { message: ChatMessage }) {
+function ChatBubble({ message, searchQuery = "" }: { message: ChatMessage; searchQuery?: string }) {
   const isUser = message.role === "user";
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -710,12 +867,18 @@ function ChatBubble({ message }: { message: ChatMessage }) {
         )}
 
         {isUser ? (
-          <div className="whitespace-pre-wrap">{message.content}</div>
+          <div className="whitespace-pre-wrap">
+            <HighlightedText text={message.content} query={searchQuery} />
+          </div>
         ) : (
           <div className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_h1]:text-base [&_h1]:font-bold [&_h1]:mt-3 [&_h1]:mb-1.5 [&_h2]:text-sm [&_h2]:font-bold [&_h2]:mt-2.5 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_strong]:font-bold [&_table]:my-2 [&_table]:text-xs [&_th]:px-2 [&_th]:py-1 [&_th]:border [&_th]:border-foreground/20 [&_th]:bg-foreground/5 [&_th]:font-semibold [&_td]:px-2 [&_td]:py-1 [&_td]:border [&_td]:border-foreground/10 [&_code]:text-xs [&_code]:bg-foreground/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_pre]:bg-foreground/10 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_blockquote]:border-l-2 [&_blockquote]:border-foreground/20 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:my-2 [&_hr]:my-3 [&_hr]:border-foreground/10">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {message.content}
-            </ReactMarkdown>
+            {searchQuery ? (
+              <HighlightedText text={message.content} query={searchQuery} />
+            ) : (
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {message.content}
+              </ReactMarkdown>
+            )}
           </div>
         )}
 
