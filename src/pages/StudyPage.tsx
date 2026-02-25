@@ -127,6 +127,7 @@ const StudyPage = () => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
+  const [showDocs, setShowDocs] = useState(false); // mobile sidebar toggle
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -291,7 +292,7 @@ const StudyPage = () => {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       {/* Hero Banner */}
-      <div className="relative rounded-2xl overflow-hidden h-40 sm:h-48 gradient-rose">
+      <div className="relative rounded-2xl overflow-hidden h-32 sm:h-40 md:h-48 gradient-rose">
         <div className="absolute inset-0 flex items-center px-6 sm:px-8">
           <div>
             <h1 className="font-serif text-3xl sm:text-4xl font-bold text-primary-foreground">
@@ -463,10 +464,38 @@ const StudyPage = () => {
             </div>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6 h-[calc(100vh-18rem)]">
+          <div className="flex flex-col md:grid md:grid-cols-3 gap-4 md:gap-6 h-[calc(100vh-14rem)] md:h-[calc(100vh-18rem)]">
+            {/* ── Mobile: Documents toggle ── */}
+            <div className="md:hidden flex items-center justify-between">
+              <button
+                onClick={() => setShowDocs(!showDocs)}
+                className="flex items-center gap-2 text-sm font-medium text-foreground"
+              >
+                <FolderOpen className="h-4 w-4" />
+                {activeSubject} ({subjectDocs.length} docs)
+                {showDocs ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              </button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+              >
+                {uploading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Upload className="h-3.5 w-3.5" />
+                )}
+                {uploading ? "Uploading..." : "Upload"}
+              </Button>
+            </div>
+
             {/* ── Sidebar: Documents ── */}
-            <div className="glass-card p-5 space-y-4 overflow-y-auto">
-              <div className="flex items-center justify-between">
+            <div className={`glass-card p-4 md:p-5 space-y-3 md:space-y-4 overflow-y-auto ${
+              showDocs ? "max-h-60 md:max-h-none" : "hidden md:block"
+            }`}>
+              <div className="hidden md:flex items-center justify-between">
                 <div>
                   <h2 className="font-serif text-lg font-semibold text-foreground">
                     {activeSubject}
@@ -584,7 +613,7 @@ const StudyPage = () => {
             </div>
 
             {/* ── Chat area ── */}
-            <div className="md:col-span-2 glass-card p-5 flex flex-col">
+            <div className="md:col-span-2 glass-card p-3 md:p-5 flex flex-col min-h-0 flex-1">
               {/* Search bar */}
               <AnimatePresence>
                 {searchOpen && (
@@ -739,7 +768,7 @@ const StudyPage = () => {
               )}
 
               {/* Chat input */}
-              <div className="flex gap-2 mt-4">
+              <div className="flex gap-2 mt-3 md:mt-4">
                 <div className="flex-1 relative">
                   <input
                     type="text"
@@ -752,7 +781,7 @@ const StudyPage = () => {
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
                     disabled={readyDocs.length === 0 || (usage !== null && !usage.allowed)}
-                    className="w-full h-11 pl-4 pr-10 rounded-lg bg-muted/50 border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                    className="w-full h-10 md:h-11 pl-3 md:pl-4 pr-10 rounded-lg bg-muted/50 border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
                   />
                   {voiceSupported && (
                     <button
@@ -797,9 +826,11 @@ const StudyPage = () => {
 
 // ─── Highlight helper ────────────────────────────────────────
 
-function HighlightedText({ text, query }: { text: string; query: string }) {
-  if (!query.trim()) return <>{text}</>;
-  const parts = text.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi"));
+function highlightText(text: string, query: string): React.ReactNode {
+  if (!query.trim()) return text;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const parts = text.split(new RegExp(`(${escaped})`, "gi"));
+  if (parts.length === 1) return text;
   return (
     <>
       {parts.map((part, i) =>
@@ -812,6 +843,34 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
         )
       )}
     </>
+  );
+}
+
+function HighlightedMarkdown({ content, query }: { content: string; query: string }) {
+  // Custom component overrides to inject highlighting into text nodes
+  const components = useMemo(() => {
+    if (!query.trim()) return {};
+    // Override common block/inline elements to highlight their text children
+    const wrapChildren = (Tag: string) => {
+      return ({ children, ...props }: any) => {
+        const highlighted = typeof children === "string" ? highlightText(children, query) : children;
+        return <Tag {...props}>{highlighted}</Tag>;
+      };
+    };
+    return {
+      p: wrapChildren("p"),
+      li: wrapChildren("li"),
+      td: wrapChildren("td"),
+      th: wrapChildren("th"),
+      strong: wrapChildren("strong"),
+      em: wrapChildren("em"),
+    } as any;
+  }, [query]);
+
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      {content}
+    </ReactMarkdown>
   );
 }
 
@@ -874,17 +933,11 @@ function ChatBubble({ message, searchQuery = "" }: { message: ChatMessage; searc
 
         {isUser ? (
           <div className="whitespace-pre-wrap">
-            <HighlightedText text={message.content} query={searchQuery} />
+            {highlightText(message.content, searchQuery)}
           </div>
         ) : (
           <div className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_h1]:text-base [&_h1]:font-bold [&_h1]:mt-3 [&_h1]:mb-1.5 [&_h2]:text-sm [&_h2]:font-bold [&_h2]:mt-2.5 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_strong]:font-bold [&_table]:my-2 [&_table]:text-xs [&_th]:px-2 [&_th]:py-1 [&_th]:border [&_th]:border-foreground/20 [&_th]:bg-foreground/5 [&_th]:font-semibold [&_td]:px-2 [&_td]:py-1 [&_td]:border [&_td]:border-foreground/10 [&_code]:text-xs [&_code]:bg-foreground/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_pre]:bg-foreground/10 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_blockquote]:border-l-2 [&_blockquote]:border-foreground/20 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:my-2 [&_hr]:my-3 [&_hr]:border-foreground/10">
-            {searchQuery ? (
-              <HighlightedText text={message.content} query={searchQuery} />
-            ) : (
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {message.content}
-              </ReactMarkdown>
-            )}
+            <HighlightedMarkdown content={message.content} query={searchQuery} />
           </div>
         )}
 
