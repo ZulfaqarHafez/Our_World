@@ -33,7 +33,8 @@ export function useDocuments(moduleName?: string) {
       if (!user) throw new Error("Not authenticated");
 
       // 2. Upload file directly to Supabase Storage (bypasses Vercel 4.5MB body limit)
-      const storagePath = `${user.id}/${Date.now()}_${file.name}`;
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const storagePath = `${user.id}/${Date.now()}_${safeName}`;
       const { error: uploadErr } = await supabase.storage
         .from("lecture-materials")
         .upload(storagePath, file, { contentType: file.type });

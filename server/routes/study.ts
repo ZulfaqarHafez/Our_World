@@ -156,6 +156,7 @@ async function updateUsage(userId: string, inputTokens: number, outputTokens: nu
 
 studyRouter.post("/ingest", async (req: Request, res: Response) => {
   try {
+    console.log("[ingest] Body received:", JSON.stringify(req.body));
     const user = await getUserFromRequest(req.headers.authorization);
     if (!user) return res.status(401).json({ error: "Unauthorized" });
 
@@ -163,6 +164,7 @@ studyRouter.post("/ingest", async (req: Request, res: Response) => {
     const moduleName = ((module_name as string) || "General").slice(0, MAX_MODULE_NAME_LENGTH);
 
     if (!storage_path || !filename) {
+      console.error("[ingest] Missing fields. body:", req.body);
       return res.status(400).json({ error: "Missing storage_path or filename" });
     }
 
@@ -295,7 +297,9 @@ studyRouter.post("/ingest", async (req: Request, res: Response) => {
     }
   } catch (err) {
     console.error("Ingest error:", err);
-    res.status(500).json({ error: "Internal server error" });
+    if (!res.headersSent) {
+      res.status(500).json({ error: (err as any)?.message || "Internal server error" });
+    }
   }
 });
 
