@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { apiFetch } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import type { ChatMessage, DocumentRow } from "@/lib/types";
 
 const CHAT_HISTORY_TURNS = 5;
@@ -25,13 +26,32 @@ export function useDocuments(moduleName?: string) {
 
   const uploadDocument = useCallback(
     async (file: File, moduleNameOverride?: string) => {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("module_name", moduleNameOverride || moduleName || "General");
+      const moduleName_ = moduleNameOverride || moduleName || "General";
 
+      // 1. Get current user id for storage path
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // 2. Upload file directly to Supabase Storage (bypasses Vercel 4.5MB body limit)
+      const storagePath = `${user.id}/${Date.now()}_${file.name}`;
+      const { error: uploadErr } = await supabase.storage
+        .from("lecture-materials")
+        .upload(storagePath, file, { contentType: file.type });
+
+      if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
+
+      // 3. Tell the server to process the uploaded file (tiny JSON body)
       const result = await apiFetch<{ message: string; document: DocumentRow }>(
         "/api/study/ingest",
-        { method: "POST", body: formData }
+        {
+          method: "POST",
+          body: JSON.stringify({
+            storage_path: storagePath,
+            filename: file.name,
+            mime_type: file.type,
+            module_name: moduleName_,
+          }),
+        }
       );
 
       // Add the new document optimistically (status: processing)
@@ -90,6 +110,8 @@ export function useChat(moduleName?: string) {
   const loadConversation = useCallback(async () => {
     if (!moduleName) return;
     setConversationLoaded(false);
+    // Clear previous subject's messages immediately
+    setMessages([]);
     try {
       const data = await apiFetch<{
         id: string;

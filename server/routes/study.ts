@@ -1,5 +1,4 @@
 import { Router, Request, Response } from "express";
-import multer from "multer";
 import {
   getSupabaseAdmin,
   getOpenAI,
@@ -21,8 +20,6 @@ async function getFileType() {
 }
 
 export const studyRouter = Router();
-
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 6 * 1024 * 1024 } });
 
 // ─── Constants ───────────────────────────────────────────────
 
@@ -155,65 +152,73 @@ async function updateUsage(userId: string, inputTokens: number, outputTokens: nu
   }
 }
 
-// ─── POST /api/study/ingest — Upload & embed a document ─────
+// ─── POST /api/study/ingest — Process a pre-uploaded document ─────
 
-studyRouter.post("/ingest", upload.single("file"), async (req: Request, res: Response) => {
+studyRouter.post("/ingest", async (req: Request, res: Response) => {
   try {
     const user = await getUserFromRequest(req.headers.authorization);
     if (!user) return res.status(401).json({ error: "Unauthorized" });
 
-    const file = req.file;
-    const moduleName = ((req.body.module_name as string) || "General").slice(0, MAX_MODULE_NAME_LENGTH);
+    const { storage_path, filename, mime_type, module_name } = req.body || {};
+    const moduleName = ((module_name as string) || "General").slice(0, MAX_MODULE_NAME_LENGTH);
 
-    if (!file) return res.status(400).json({ error: "No file uploaded" });
+    if (!storage_path || !filename) {
+      return res.status(400).json({ error: "Missing storage_path or filename" });
+    }
+
+    // Security: verify the storage path belongs to the authenticated user
+    if (!storage_path.startsWith(`${user.id}/`)) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    const supabase = getSupabaseAdmin();
+    const openai = getOpenAI();
+
+    // 1. Download the file from Supabase Storage
+    const { data: fileData, error: downloadErr } = await supabase.storage
+      .from("lecture-materials")
+      .download(storage_path);
+
+    if (downloadErr || !fileData) {
+      console.error("Storage download error:", downloadErr);
+      return res.status(400).json({ error: "File not found in storage. Please re-upload." });
+    }
+
+    const buffer = Buffer.from(await fileData.arrayBuffer());
 
     // Validate MIME type via magic bytes (don't trust Content-Type header)
     const ft = await getFileType();
-    const detectedType = await ft.fromBuffer(file.buffer);
-    const mimeType = detectedType?.mime || file.mimetype;
+    const detectedType = await ft.fromBuffer(buffer);
+    const mimeType = detectedType?.mime || mime_type || "application/octet-stream";
 
     // For text files, fileType.fromBuffer may return undefined — that's OK
     if (detectedType && !ALLOWED_MIME_TYPES.includes(detectedType.mime)) {
       return res.status(400).json({ error: "Unsupported file type. Upload PDF or TXT files." });
     }
-    if (!detectedType && !["text/plain", "text/markdown"].includes(file.mimetype)) {
+    if (!detectedType && !["text/plain", "text/markdown"].includes(mime_type)) {
       return res.status(400).json({ error: "Unsupported file type. Upload PDF or TXT files." });
     }
 
-    // 1. Parse PDF text
+    // 2. Parse PDF text
     let text = "";
     if (mimeType === "application/pdf") {
       const pdf = await getPdfParse();
-      const pdfData = await pdf(file.buffer);
+      const pdfData = await pdf(buffer);
       text = pdfData.text;
     } else {
-      text = file.buffer.toString("utf-8");
+      text = buffer.toString("utf-8");
     }
 
     if (text.trim().length < 50) {
       return res.status(400).json({ error: "Document contains too little text to process." });
     }
 
-    const supabase = getSupabaseAdmin();
-    const openai = getOpenAI();
-
-    // 2. Upload file to Supabase Storage
-    const storagePath = `${user.id}/${Date.now()}_${file.originalname}`;
-    const { error: uploadErr } = await supabase.storage
-      .from("lecture-materials")
-      .upload(storagePath, file.buffer, { contentType: file.mimetype });
-
-    if (uploadErr) {
-      console.error("Storage upload error:", uploadErr);
-      return res.status(500).json({ error: "Failed to upload file to storage" });
-    }
-
     // 3. Create document record
     const { data: doc, error: docErr } = await supabase
       .from("documents")
       .insert({
-        filename: file.originalname,
-        file_path: storagePath,
+        filename: filename,
+        file_path: storage_path,
         uploaded_by: user.id,
         module_name: moduleName,
         status: "processing",
@@ -261,7 +266,7 @@ studyRouter.post("/ingest", upload.single("file"), async (req: Request, res: Res
             embedding: embeddingRes.data[j].embedding as unknown as number[],
             chunk_index: i + j,
             module_name: moduleName,
-            document_filename: file.originalname,
+            document_filename: filename,
           });
         }
       }
@@ -283,7 +288,7 @@ studyRouter.post("/ingest", upload.single("file"), async (req: Request, res: Res
         .update({ status: "ready", chunk_count: allChunkRows.length })
         .eq("id", doc.id);
 
-      console.log(`✅ Document "${file.originalname}" processed: ${allChunkRows.length} chunks embedded`);
+      console.log(`✅ Document "${filename}" processed: ${allChunkRows.length} chunks embedded`);
     } catch (embErr) {
       console.error("Embedding error:", embErr);
       await supabase.from("documents").update({ status: "error" }).eq("id", doc.id);

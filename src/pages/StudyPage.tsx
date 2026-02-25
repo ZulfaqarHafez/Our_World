@@ -138,9 +138,15 @@ const StudyPage = () => {
   const readyDocs = subjectDocs.filter((d) => d.status === "ready");
 
   // Handlers
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeSubject) return;
+    if (file.size > MAX_FILE_SIZE) {
+      console.error("Upload failed: File exceeds 10 MB limit");
+      e.target.value = "";
+      return;
+    }
     try {
       await uploadDocument(file, activeSubject);
       // Poll for status updates
@@ -359,7 +365,7 @@ const StudyPage = () => {
                   onChange={handleFileUpload}
                 />
               </div>
-              <p className="text-[10px] text-muted-foreground">PDF, TXT, MD — max 6 MB</p>
+              <p className="text-[10px] text-muted-foreground">PDF, TXT, MD — max 10 MB</p>
 
               {/* Scope filter */}
               <div className="space-y-1">
