@@ -54,10 +54,10 @@ function deriveSubjects(documents: DocumentRow[]): Subject[] {
   const colors = [
     "bg-primary/15 text-primary",
     "bg-accent/15 text-accent-foreground",
-    "bg-muted text-muted-foreground",
-    "bg-blue-100 text-blue-700",
-    "bg-green-100 text-green-700",
-    "bg-purple-100 text-purple-700",
+    "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+    "bg-sky-500/15 text-sky-700 dark:text-sky-400",
+    "bg-violet-500/15 text-violet-700 dark:text-violet-400",
+    "bg-rose-500/15 text-rose-700 dark:text-rose-400",
   ];
   return Array.from(map.entries()).map(([name, count], i) => ({
     name,
@@ -561,7 +561,7 @@ const StudyPage = () => {
                         {doc.status === "processing" ? (
                           <Loader2 className="h-4 w-4 animate-spin text-accent" />
                         ) : doc.status === "ready" ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                         ) : (
                           <div className="flex items-center gap-1">
                             <AlertCircle className="h-4 w-4 text-destructive" />
@@ -835,7 +835,7 @@ function highlightText(text: string, query: string): React.ReactNode {
     <>
       {parts.map((part, i) =>
         part.toLowerCase() === query.toLowerCase() ? (
-          <mark key={i} className="bg-yellow-300/60 dark:bg-yellow-500/30 text-inherit rounded-sm px-0.5">
+          <mark key={i} className="bg-primary/20 dark:bg-primary/25 text-inherit rounded-sm px-0.5">
             {part}
           </mark>
         ) : (
@@ -919,13 +919,13 @@ function ChatBubble({ message, searchQuery = "" }: { message: ChatMessage; searc
             className="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity bg-foreground/5 hover:bg-foreground/10 text-muted-foreground hover:text-foreground"
             title="Copy as markdown"
           >
-            {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
           </button>
         )}
 
         {/* Low-confidence warning */}
         {message.low_confidence && (
-          <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 rounded-lg px-3 py-2 mb-2">
+          <div className="flex items-center gap-2 text-xs text-orange-700 dark:text-orange-400 bg-orange-500/10 rounded-lg px-3 py-2 mb-2">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
             <span>Low confidence — the retrieved context may not fully cover this topic.</span>
           </div>
@@ -961,9 +961,9 @@ function ChatBubble({ message, searchQuery = "" }: { message: ChatMessage; searc
                     <span className="text-[10px] opacity-50">chunk {s.chunkIndex}</span>
                     {s.similarity !== undefined && (
                       <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                        s.similarity >= 0.7 ? "bg-green-500/15 text-green-600 dark:text-green-400" :
-                        s.similarity >= 0.5 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" :
-                        "bg-red-500/15 text-red-500"
+                        s.similarity >= 0.7 ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" :
+                        s.similarity >= 0.5 ? "bg-orange-500/15 text-orange-700 dark:text-orange-400" :
+                        "bg-red-500/15 text-red-600 dark:text-red-400"
                       }`}>
                         {Math.round(s.similarity * 100)}% match
                       </span>

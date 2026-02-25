@@ -1,7 +1,8 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Heart, Calendar, Gamepad2, BookOpen, LogOut, Home } from "lucide-react";
+import { Heart, Calendar, Gamepad2, BookOpen, LogOut, Home, Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "next-themes";
 
 const navItems = [
   { to: "/", icon: Home, label: "Home" },
@@ -14,6 +15,7 @@ const AppSidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut, user } = useAuth();
+  const { theme, setTheme } = useTheme();
 
   const handleLogout = async () => {
     await signOut();
@@ -51,12 +53,19 @@ const AppSidebar = () => {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border">
+      <div className="p-4 border-t border-border space-y-1">
         {user && (
           <p className="text-xs text-muted-foreground px-4 mb-2 truncate">
             {user.email}
           </p>
         )}
+        <button
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground w-full transition-all duration-200"
+        >
+          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          {theme === "dark" ? "Light mode" : "Dark mode"}
+        </button>
         <button
           onClick={handleLogout}
           className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground w-full transition-all duration-200"
