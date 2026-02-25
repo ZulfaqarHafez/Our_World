@@ -80,14 +80,15 @@ const StudyPage = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Hooks
+  // Hooks — always fetch ALL documents so the subject list stays complete.
+  // We filter to the active subject in derived state below.
   const {
     documents,
     loading: docsLoading,
     fetchDocuments,
     uploadDocument,
     deleteDocument,
-  } = useDocuments(activeSubject || undefined);
+  } = useDocuments(undefined);
 
   const {
     messages,
