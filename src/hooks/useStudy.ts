@@ -134,8 +134,14 @@ export function useChat(moduleName?: string) {
     async (question: string, documentId?: string) => {
       // Add user message
       const userMsg: ChatMessage = { role: "user", content: question };
-      const updatedMessages = [...messages, userMsg];
-      setMessages(updatedMessages);
+
+      // Use functional update to get latest messages (avoid stale closure)
+      let updatedMessages: ChatMessage[] = [];
+      setMessages((prev) => {
+        updatedMessages = [...prev, userMsg];
+        return updatedMessages;
+      });
+
       setIsLoading(true);
 
       try {
@@ -183,7 +189,7 @@ export function useChat(moduleName?: string) {
         setIsLoading(false);
       }
     },
-    [saveConversation]
+    [moduleName, saveConversation]
   );
 
   const clearMessages = useCallback(async () => {
