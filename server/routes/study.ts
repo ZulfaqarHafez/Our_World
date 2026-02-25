@@ -6,10 +6,13 @@ import {
 } from "../lib/clients.js";
 
 // Lazy-load pdf-parse and file-type to avoid initialization crashes on Vercel
-// pdf-parse tries to load a test PDF on import which doesn't exist in serverless
-let _pdfParse: typeof import("pdf-parse") | null = null;
+// pdf-parse's main entry tries to load a test PDF on import — import the inner
+// module directly to bypass that.
+let _pdfParse: any = null;
 async function getPdfParse() {
-  if (!_pdfParse) _pdfParse = await import("pdf-parse");
+  if (!_pdfParse) {
+    _pdfParse = await import("pdf-parse/lib/pdf-parse.js");
+  }
   return (_pdfParse as any).default || _pdfParse;
 }
 
