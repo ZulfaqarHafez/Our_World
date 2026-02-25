@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { apiFetch } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import type { ChatMessage, DocumentRow } from "@/lib/types";
@@ -81,6 +81,39 @@ export function useDocuments(moduleName?: string) {
     },
     [fetchDocuments]
   );
+
+  // Supabase Realtime: auto-update documents on DB changes
+  useEffect(() => {
+    const channel = supabase
+      .channel("documents-realtime")
+      .on(
+        "postgres_changes" as any,
+        { event: "*", schema: "public", table: "documents" },
+        (payload: any) => {
+          if (payload.eventType === "UPDATE") {
+            const updated = payload.new as DocumentRow;
+            setDocuments((prev) =>
+              prev.map((d) => (d.id === updated.id ? { ...d, ...updated } : d))
+            );
+          } else if (payload.eventType === "INSERT") {
+            const inserted = payload.new as DocumentRow;
+            setDocuments((prev) => {
+              // Avoid duplicates (optimistic insert may already have it)
+              if (prev.some((d) => d.id === inserted.id)) return prev;
+              return [inserted, ...prev];
+            });
+          } else if (payload.eventType === "DELETE") {
+            const deleted = payload.old as { id: string };
+            setDocuments((prev) => prev.filter((d) => d.id !== deleted.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   return { documents, loading, fetchDocuments, uploadDocument, deleteDocument, refreshDocument };
 }

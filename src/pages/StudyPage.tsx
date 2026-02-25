@@ -22,6 +22,8 @@ import {
   Lightbulb,
   ListChecks,
   HelpCircle,
+  Copy,
+  Check,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
@@ -202,11 +204,7 @@ const StudyPage = () => {
     }
     try {
       await uploadDocument(file, activeSubject);
-      toast({ title: "Upload started", description: `"${file.name}" is being processed.` });
-      // Poll for status updates
-      setTimeout(() => fetchDocuments(), 3000);
-      setTimeout(() => fetchDocuments(), 8000);
-      setTimeout(() => fetchDocuments(), 15000);
+      toast({ title: "Upload started", description: `"${file.name}" is being processed. Status updates automatically.` });
     } catch (err: any) {
       console.error("Upload failed:", err);
       toast({ title: "Upload failed", description: err.message || "Something went wrong.", variant: "destructive" });
@@ -659,20 +657,50 @@ const StudyPage = () => {
 function ChatBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for older browsers
+      const textarea = document.createElement("textarea");
+      textarea.value = message.content;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+      className={`group flex ${isUser ? "justify-end" : "justify-start"}`}
     >
       <div
-        className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+        className={`relative max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
           isUser
             ? "gradient-rose text-primary-foreground rounded-br-md"
             : "bg-muted text-foreground rounded-bl-md"
         }`}
       >
+        {/* Copy button (assistant messages only) */}
+        {!isUser && (
+          <button
+            onClick={handleCopy}
+            className="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity bg-foreground/5 hover:bg-foreground/10 text-muted-foreground hover:text-foreground"
+            title="Copy as markdown"
+          >
+            {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+          </button>
+        )}
+
         {/* Low-confidence warning */}
         {message.low_confidence && (
           <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 rounded-lg px-3 py-2 mb-2">
