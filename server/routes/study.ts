@@ -22,7 +22,7 @@ async function getFileType() {
 
 export const studyRouter = Router();
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 4.5 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 6 * 1024 * 1024 } });
 
 // ─── Constants ───────────────────────────────────────────────
 
