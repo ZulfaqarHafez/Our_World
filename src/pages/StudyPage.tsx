@@ -18,6 +18,10 @@ import {
   CheckCircle2,
   Clock,
   X,
+  Sparkles,
+  Lightbulb,
+  ListChecks,
+  HelpCircle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
@@ -67,6 +71,42 @@ const item = {
   hidden: { opacity: 0, y: 10 },
   show: { opacity: 1, y: 0 },
 };
+
+// ─── Starter prompts ────────────────────────────────────────
+
+interface StarterPrompt {
+  icon: React.ReactNode;
+  label: string;
+  question: string;
+}
+
+function getStarterPrompts(subjectName: string, docNames: string[]): StarterPrompt[] {
+  const docContext = docNames.length > 0
+    ? ` from ${docNames.length === 1 ? `"${docNames[0]}"` : "my uploaded materials"}`
+    : "";
+  return [
+    {
+      icon: <Sparkles className="h-4 w-4" />,
+      label: "Summarize key concepts",
+      question: `Summarize the key concepts and main ideas${docContext}.`,
+    },
+    {
+      icon: <ListChecks className="h-4 w-4" />,
+      label: "Create a study outline",
+      question: `Create a structured study outline covering the main topics${docContext}.`,
+    },
+    {
+      icon: <Lightbulb className="h-4 w-4" />,
+      label: "Explain important terms",
+      question: `What are the most important terms and definitions I should know${docContext}?`,
+    },
+    {
+      icon: <HelpCircle className="h-4 w-4" />,
+      label: "Practice questions",
+      question: `Generate 5 practice questions with answers to test my understanding of the material${docContext}.`,
+    },
+  ];
+}
 
 // ─── Component ───────────────────────────────────────────────
 
@@ -444,6 +484,11 @@ const StudyPage = () => {
                             month: "short",
                           })}
                         </p>
+                        {doc.summary && scopeToDoc === doc.id && (
+                          <p className="text-xs text-muted-foreground/80 mt-1.5 leading-relaxed line-clamp-3">
+                            {doc.summary}
+                          </p>
+                        )}
                       </div>
                       <button
                         onClick={async (e) => {
@@ -478,8 +523,8 @@ const StudyPage = () => {
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
                 ) : messages.length === 0 ? (
-                  <div className="h-full flex items-center justify-center">
-                    <div className="text-center text-muted-foreground">
+                  <div className="h-full flex flex-col items-center justify-center">
+                    <div className="text-center text-muted-foreground mb-6">
                       <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-30" />
                       <h3 className="font-serif text-lg font-semibold text-foreground/70 mb-1">
                         Start a conversation
@@ -490,6 +535,43 @@ const StudyPage = () => {
                           : `Upload your ${activeSubject} materials first, then ask questions.`}
                       </p>
                     </div>
+
+                    {/* Starter prompts */}
+                    {readyDocs.length > 0 && (
+                      <motion.div
+                        variants={container}
+                        initial="hidden"
+                        animate="show"
+                        className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-lg px-4"
+                      >
+                        {getStarterPrompts(
+                          activeSubject || "",
+                          readyDocs.map((d) => d.filename)
+                        ).map((prompt, i) => (
+                          <motion.button
+                            key={i}
+                            variants={item}
+                            onClick={() => {
+                              setChatInput(prompt.question);
+                              // Auto-send after a brief delay so user sees what's sent
+                              setTimeout(() => {
+                                sendMessage(prompt.question, scopeToDoc);
+                                setChatInput("");
+                              }, 100);
+                            }}
+                            disabled={chatLoading}
+                            className="flex items-start gap-3 p-3 rounded-xl border border-border bg-muted/30 hover:bg-muted/60 hover:border-primary/30 transition-all text-left group"
+                          >
+                            <div className="mt-0.5 text-primary/60 group-hover:text-primary transition-colors">
+                              {prompt.icon}
+                            </div>
+                            <span className="text-sm text-foreground/70 group-hover:text-foreground transition-colors">
+                              {prompt.label}
+                            </span>
+                          </motion.button>
+                        ))}
+                      </motion.div>
+                    )}
                   </div>
                 ) : (
                   messages.map((msg, i) => (

@@ -159,7 +159,6 @@ async function updateUsage(userId: string, inputTokens: number, outputTokens: nu
 
 studyRouter.post("/ingest", async (req: Request, res: Response) => {
   try {
-    console.log("[ingest] Body received:", JSON.stringify(req.body));
     const user = await getUserFromRequest(req.headers.authorization);
     if (!user) return res.status(401).json({ error: "Unauthorized" });
 
@@ -293,6 +292,42 @@ studyRouter.post("/ingest", async (req: Request, res: Response) => {
         .update({ status: "ready", chunk_count: allChunkRows.length })
         .eq("id", doc.id);
 
+      // 8. Generate auto-summary from first few chunks
+      try {
+        const summaryChunks = allChunkRows
+          .slice(0, 3)
+          .map((c) => c.content)
+          .join("\n\n");
+
+        const summaryRes = await openai.chat.completions.create({
+          model: CHAT_MODEL,
+          max_tokens: 300,
+          temperature: 0.3,
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are a study assistant. Given excerpts from a document, write a concise 2-4 sentence summary of what the document covers. Focus on the main topics and key concepts. Do NOT use markdown formatting.",
+            },
+            {
+              role: "user",
+              content: `Document: "${filename}"\n\nExcerpts:\n${summaryChunks}`,
+            },
+          ],
+        });
+
+        const summary = summaryRes.choices[0]?.message?.content?.trim();
+        if (summary) {
+          await supabase
+            .from("documents")
+            .update({ summary })
+            .eq("id", doc.id);
+        }
+      } catch (summaryErr) {
+        // Non-critical — document is still usable without summary
+        console.error("Summary generation failed:", summaryErr);
+      }
+
       console.log(`✅ Document "${filename}" processed: ${allChunkRows.length} chunks embedded`);
     } catch (embErr) {
       console.error("Embedding error:", embErr);
@@ -384,7 +419,6 @@ studyRouter.post("/chat", async (req: Request, res: Response) => {
     let matchErr: any = null;
 
     // Try the new hybrid search function first
-    console.log(`[chat] Searching: module="${module_name}", user="${user.id}", doc_filter="${document_id || 'none'}"`);
     const hybridResult = await supabase.rpc("match_documents_hybrid", {
       query_embedding: queryEmbedding,
       query_text: searchQuery,
@@ -428,17 +462,11 @@ studyRouter.post("/chat", async (req: Request, res: Response) => {
       matches = hybridResult.data || [];
     }
 
-    console.log(`[chat] Found ${matches.length} chunks, modules: [${matches.map((m: any) => m.module_name).join(", ")}]`);
-
     // ── 3b. Server-side safety net: ALWAYS filter by module_name in code
     //        This prevents cross-subject contamination even if the DB function
     //        falls through to an unfiltered fallback.
     if (module_name && matches.length > 0) {
-      const beforeCount = matches.length;
       matches = matches.filter((m: any) => m.module_name === module_name);
-      if (matches.length < beforeCount) {
-        console.log(`[chat] Server-side module filter: ${beforeCount} → ${matches.length} (kept only module="${module_name}")`);
-      }
     }
 
     if (matchErr) {

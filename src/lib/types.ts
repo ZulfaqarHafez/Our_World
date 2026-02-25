@@ -53,6 +53,7 @@ export interface DocumentRow {
   uploaded_at: string;
   status: "processing" | "ready" | "error";
   chunk_count: number;
+  summary?: string;
 }
 
 export interface DocumentChunkRow {
