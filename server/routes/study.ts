@@ -384,6 +384,7 @@ studyRouter.post("/chat", async (req: Request, res: Response) => {
     let matchErr: any = null;
 
     // Try the new hybrid search function first
+    console.log(`[chat] Searching: module="${module_name}", user="${user.id}", doc_filter="${document_id || 'none'}"`);
     const hybridResult = await supabase.rpc("match_documents_hybrid", {
       query_embedding: queryEmbedding,
       query_text: searchQuery,
@@ -397,18 +398,37 @@ studyRouter.post("/chat", async (req: Request, res: Response) => {
     if (hybridResult.error) {
       // Fall back to the old match_documents for backwards compatibility
       console.warn("Hybrid search failed, falling back to match_documents:", hybridResult.error.message);
-      const fallback = await supabase.rpc("match_documents", {
-        query_embedding: queryEmbedding,
-        match_count: MAX_CHUNKS_TO_LLM,
-        filter_document_id: document_id || null,
-        filter_user_id: user.id,
-        filter_module: module_name || null,
-      });
-      matches = fallback.data || [];
-      matchErr = fallback.error;
+      try {
+        const fallback = await supabase.rpc("match_documents", {
+          query_embedding: queryEmbedding,
+          match_count: MAX_CHUNKS_TO_LLM,
+          filter_document_id: document_id || null,
+          filter_user_id: user.id,
+          filter_module: module_name || null,
+        });
+        if (fallback.error) {
+          // If fallback also fails (e.g. filter_module not supported), try without module filter
+          console.warn("Fallback with filter_module failed, retrying without:", fallback.error.message);
+          const fallback2 = await supabase.rpc("match_documents", {
+            query_embedding: queryEmbedding,
+            match_count: MAX_CHUNKS_TO_LLM,
+            filter_document_id: document_id || null,
+            filter_user_id: user.id,
+          });
+          matches = fallback2.data || [];
+          matchErr = fallback2.error;
+        } else {
+          matches = fallback.data || [];
+        }
+      } catch (fallbackErr) {
+        console.error("All search fallbacks failed:", fallbackErr);
+        matchErr = { message: "Search failed" };
+      }
     } else {
       matches = hybridResult.data || [];
     }
+
+    console.log(`[chat] Found ${matches.length} chunks, modules: [${matches.map((m: any) => m.module_name).join(", ")}]`);
 
     if (matchErr) {
       console.error("Match error:", matchErr);
