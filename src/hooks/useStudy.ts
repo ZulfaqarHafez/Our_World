@@ -42,23 +42,29 @@ export function useDocuments(moduleName?: string) {
       if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
 
       // 3. Tell the server to process the uploaded file (tiny JSON body)
-      const result = await apiFetch<{ message: string; document: DocumentRow }>(
-        "/api/study/ingest",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            storage_path: storagePath,
-            filename: file.name,
-            mime_type: file.type,
-            module_name: moduleName_,
-          }),
-        }
-      );
+      try {
+        const result = await apiFetch<{ message: string; document: DocumentRow }>(
+          "/api/study/ingest",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              storage_path: storagePath,
+              filename: file.name,
+              mime_type: file.type,
+              module_name: moduleName_,
+            }),
+          }
+        );
 
-      // Add the new document optimistically (status: processing)
-      setDocuments((prev) => [result.document, ...prev]);
+        // Add the new document optimistically (status: processing)
+        setDocuments((prev) => [result.document, ...prev]);
 
-      return result;
+        return result;
+      } catch (ingestErr) {
+        // Clean up orphaned file from storage if ingest failed
+        await supabase.storage.from("lecture-materials").remove([storagePath]);
+        throw ingestErr;
+      }
     },
     [moduleName]
   );
@@ -184,6 +190,7 @@ export function useChat(moduleName?: string) {
           role: "assistant",
           content: `Error: ${err.message || "Something went wrong"}`,
         };
+        // Don't save error messages to the server conversation
         setMessages((prev) => [...prev, errorMsg]);
       } finally {
         setIsLoading(false);

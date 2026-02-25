@@ -336,9 +336,11 @@ studyRouter.post("/chat", async (req: Request, res: Response) => {
     const openai = getOpenAI();
 
     // ── 1. If this is a follow-up, reformulate the question into a standalone query
-    let searchQuery = question;
+    let searchQuery = question.slice(0, MAX_QUESTION_LENGTH);
     const history: { role: string; content: string }[] = Array.isArray(chat_history)
-      ? chat_history.slice(-CHAT_HISTORY_TURNS * 2) // last N turns (user+assistant pairs)
+      ? chat_history
+          .filter((m: any) => m && typeof m.content === "string" && ["user", "assistant"].includes(m.role))
+          .slice(-CHAT_HISTORY_TURNS * 2)
       : [];
 
     if (history.length > 0) {

@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useDocuments, useChat, useVoiceInput } from "@/hooks/useStudy";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import type { DocumentRow, ChatMessage } from "@/lib/types";
 
 // ─── Subject helpers ─────────────────────────────────────────
@@ -71,6 +72,7 @@ const item = {
 
 const StudyPage = () => {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [activeSubject, setActiveSubject] = useState<string | null>(null);
   const [view, setView] = useState<"subjects" | "chat">("subjects");
   const [newSubjectName, setNewSubjectName] = useState("");
@@ -140,22 +142,34 @@ const StudyPage = () => {
 
   // Handlers
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+  const ALLOWED_EXTENSIONS = [".pdf", ".txt", ".md"];
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeSubject) return;
+
+    // Validate file extension
+    const ext = "." + file.name.split(".").pop()?.toLowerCase();
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+      toast({ title: "Invalid file type", description: "Only PDF, TXT, and MD files are supported.", variant: "destructive" });
+      e.target.value = "";
+      return;
+    }
+
     if (file.size > MAX_FILE_SIZE) {
-      console.error("Upload failed: File exceeds 10 MB limit");
+      toast({ title: "File too large", description: `Max file size is 10 MB. Your file is ${(file.size / 1024 / 1024).toFixed(1)} MB.`, variant: "destructive" });
       e.target.value = "";
       return;
     }
     try {
       await uploadDocument(file, activeSubject);
+      toast({ title: "Upload started", description: `"${file.name}" is being processed.` });
       // Poll for status updates
       setTimeout(() => fetchDocuments(), 3000);
       setTimeout(() => fetchDocuments(), 8000);
       setTimeout(() => fetchDocuments(), 15000);
     } catch (err: any) {
       console.error("Upload failed:", err);
+      toast({ title: "Upload failed", description: err.message || "Something went wrong.", variant: "destructive" });
     }
     e.target.value = "";
   };
@@ -163,6 +177,10 @@ const StudyPage = () => {
   const handleSend = async () => {
     const q = chatInput.trim();
     if (!q || chatLoading) return;
+    if (q.length > 2000) {
+      toast({ title: "Question too long", description: "Max 2000 characters.", variant: "destructive" });
+      return;
+    }
     setChatInput("");
     resetTranscript();
     await sendMessage(q, scopeToDoc);
@@ -251,6 +269,7 @@ const StudyPage = () => {
                   key={subject.name}
                   variants={item}
                   onClick={() => {
+                    setScopeToDoc(undefined);
                     setActiveSubject(subject.name);
                     setView("chat");
                   }}
@@ -306,6 +325,7 @@ const StudyPage = () => {
             <button
               onClick={() => {
                 setView("subjects");
+                setActiveSubject(null);
                 setScopeToDoc(undefined);
               }}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
@@ -405,7 +425,9 @@ const StudyPage = () => {
                         ) : doc.status === "ready" ? (
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
                         ) : (
-                          <AlertCircle className="h-4 w-4 text-destructive" />
+                          <div className="flex items-center gap-1">
+                            <AlertCircle className="h-4 w-4 text-destructive" />
+                          </div>
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -424,10 +446,17 @@ const StudyPage = () => {
                         </p>
                       </div>
                       <button
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation();
                           if (confirm(`Delete "${doc.filename}"?`)) {
-                            deleteDocument(doc.id);
+                            try {
+                              await deleteDocument(doc.id);
+                              if (scopeToDoc === doc.id) setScopeToDoc(undefined);
+                              toast({ title: "Document deleted", description: `"${doc.filename}" has been removed.` });
+                              fetchDocuments(); // refresh the list
+                            } catch (err: any) {
+                              toast({ title: "Delete failed", description: err.message || "Something went wrong.", variant: "destructive" });
+                            }
                           }
                         }}
                         className="text-muted-foreground hover:text-destructive transition-colors p-1"
