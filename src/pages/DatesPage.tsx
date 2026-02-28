@@ -199,7 +199,7 @@ const DatesPage = () => {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  accept="image/*"
                   multiple
                   className="hidden"
                   onChange={handleImageSelect}
@@ -221,7 +221,7 @@ const DatesPage = () => {
                   ))}
                 </div>
               )}
-              <p className="text-xs text-muted-foreground">JPG, PNG, WebP, GIF — max 5 MB each</p>
+              <p className="text-xs text-muted-foreground">JPG, PNG, WebP, GIF, HEIC — max 5 MB each</p>
             </div>
 
             {formError && (

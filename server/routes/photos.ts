@@ -8,7 +8,11 @@ export const photosRouter = Router();
 const MAX_PATHS = 50;
 const MAX_IMAGES = 5;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB per image
-const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const ALLOWED_MIME = [
+  "image/jpeg", "image/png", "image/webp", "image/gif",
+  "image/heic", "image/heif",       // iPhone default format
+  "image/bmp", "image/tiff",        // other common formats
+];
 
 const upload = multer({
   storage: multer.memoryStorage(),
