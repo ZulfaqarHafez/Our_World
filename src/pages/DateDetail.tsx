@@ -1,16 +1,70 @@
+import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, MapPin, Calendar as CalendarIcon, Pencil, Trash2, Trophy, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useDate, useDates } from "@/hooks/useDatesGames";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const DateDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { data: dateEntry, isLoading: loading, isError: notFound } = useDate(id);
-  const { deleteDate } = useDates();
+  const { updateDate, deleteDate } = useDates();
 
   const photoUrls = dateEntry?.photo_urls ?? [];
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    date: "",
+    location: "",
+    description: "",
+    mood: "",
+    journal_entry: "",
+  });
+
+  // Populate form when dialog opens
+  useEffect(() => {
+    if (editOpen && dateEntry) {
+      setEditForm({
+        title: dateEntry.title ?? "",
+        date: dateEntry.date ?? "",
+        location: dateEntry.location ?? "",
+        description: dateEntry.description ?? "",
+        mood: dateEntry.mood ?? "",
+        journal_entry: dateEntry.journal_entry ?? "",
+      });
+    }
+  }, [editOpen, dateEntry]);
+
+  const handleUpdate = async () => {
+    if (!id || !editForm.title.trim()) return;
+    setSaving(true);
+    try {
+      await updateDate(id, {
+        title: editForm.title,
+        date: editForm.date,
+        location: editForm.location,
+        description: editForm.description,
+        mood: editForm.mood || null,
+        journal_entry: editForm.journal_entry || null,
+      });
+      setEditOpen(false);
+    } catch (err) {
+      console.error("Update failed:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!id || !confirm("Delete this date entry?")) return;
@@ -77,7 +131,12 @@ const DateDetail = () => {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="icon" className="h-9 w-9 bg-card/80 backdrop-blur-sm border-primary-foreground/20">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 bg-card/80 backdrop-blur-sm border-primary-foreground/20"
+              onClick={() => setEditOpen(true)}
+            >
               <Pencil className="h-4 w-4" />
             </Button>
             <Button
@@ -158,6 +217,59 @@ const DateDetail = () => {
           </div>
         </div>
       )}
+      {/* Edit Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-serif">Edit Date</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Input
+                placeholder="Title *"
+                value={editForm.title}
+                onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
+              />
+              <Input
+                type="date"
+                value={editForm.date}
+                onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))}
+              />
+              <Input
+                placeholder="Location"
+                value={editForm.location}
+                onChange={(e) => setEditForm((f) => ({ ...f, location: e.target.value }))}
+              />
+              <Input
+                placeholder="Mood emoji (e.g. 🥰)"
+                value={editForm.mood}
+                onChange={(e) => setEditForm((f) => ({ ...f, mood: e.target.value }))}
+                maxLength={4}
+              />
+            </div>
+            <Textarea
+              placeholder="Description"
+              value={editForm.description}
+              onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+              rows={2}
+            />
+            <Textarea
+              placeholder="Journal entry (optional)"
+              value={editForm.journal_entry}
+              onChange={(e) => setEditForm((f) => ({ ...f, journal_entry: e.target.value }))}
+              rows={3}
+            />
+            <Button
+              className="gradient-rose text-primary-foreground w-full"
+              disabled={!editForm.title.trim() || saving}
+              onClick={handleUpdate}
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 };
