@@ -151,7 +151,7 @@ datesRouter.post("/", async (req, res) => {
       return;
     }
 
-    const sb = getSupabaseForUser(user.token);
+    const sb = getSupabaseAdmin();
 
     const { data, error } = await sb
       .from("dates")
@@ -184,9 +184,8 @@ datesRouter.put("/:id", async (req, res) => {
     const user = await requireAuth(req, res);
     if (!user) return;
 
-    const sb = getSupabaseForUser(user.token);
+    const sb = getSupabaseAdmin();
 
-    // Only allow updating your own dates (RLS enforces this too)
     const { title, date, location, description, mood, journal_entry, photos } = req.body;
 
     const updates: Record<string, any> = {};
@@ -212,7 +211,7 @@ datesRouter.put("/:id", async (req, res) => {
 
     if (error) throw error;
     if (!data) {
-      res.status(404).json({ error: "Date not found or not yours" });
+      res.status(404).json({ error: "Date not found" });
       return;
     }
 
@@ -230,7 +229,7 @@ datesRouter.delete("/:id", async (req, res) => {
     const user = await requireAuth(req, res);
     if (!user) return;
 
-    const sb = getSupabaseForUser(user.token);
+    const sb = getSupabaseAdmin();
 
     const { error } = await sb
       .from("dates")

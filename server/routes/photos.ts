@@ -108,16 +108,13 @@ photosRouter.post("/sign", async (req: Request, res: Response) => {
       return res.status(400).json({ error: `Maximum ${MAX_PATHS} paths per request` });
     }
 
-    // Validate all paths belong to the requesting user and have no traversal
+    // Validate paths have no traversal attacks
     for (const p of paths) {
       if (typeof p !== "string") {
         return res.status(400).json({ error: "All paths must be strings" });
       }
       if (p.includes("..") || p.startsWith("/")) {
         return res.status(400).json({ error: "Invalid path detected" });
-      }
-      if (!p.startsWith(`${user.id}/`)) {
-        return res.status(403).json({ error: "You can only access your own photos" });
       }
     }
 
