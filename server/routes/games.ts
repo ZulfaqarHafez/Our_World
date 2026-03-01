@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getUserFromRequest, getSupabaseForUser } from "../lib/clients.js";
+import { getUserFromRequest, getSupabaseForUser, getSupabaseAdmin } from "../lib/clients.js";
 
 export const gamesRouter = Router();
 
@@ -128,7 +128,7 @@ gamesRouter.post("/", async (req, res) => {
       return;
     }
 
-    const sb = getSupabaseForUser(user.token);
+    const sb = getSupabaseAdmin();
 
     const { data, error } = await sb
       .from("games")
@@ -141,6 +141,7 @@ gamesRouter.post("/", async (req, res) => {
         notes: notes?.trim() || null,
         played_at: played_at || new Date().toISOString().split("T")[0],
         date_id: date_id || null,
+        created_by: user.id,
       })
       .select()
       .single();
@@ -161,7 +162,7 @@ gamesRouter.put("/:id", async (req, res) => {
     const user = await requireAuth(req, res);
     if (!user) return;
 
-    const sb = getSupabaseForUser(user.token);
+    const sb = getSupabaseAdmin();
     const { game_name, game_category, winner, score_zul, score_gf, notes, played_at, date_id } = req.body;
 
     const updates: Record<string, any> = {};
@@ -206,7 +207,7 @@ gamesRouter.delete("/:id", async (req, res) => {
     const user = await requireAuth(req, res);
     if (!user) return;
 
-    const sb = getSupabaseForUser(user.token);
+    const sb = getSupabaseAdmin();
 
     const { error } = await sb
       .from("games")
