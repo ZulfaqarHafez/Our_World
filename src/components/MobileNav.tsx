@@ -1,7 +1,8 @@
-import { NavLink, useLocation } from "react-router-dom";
-import { Home, Calendar, Gamepad2, BookOpen, Sun, Moon } from "lucide-react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Home, Calendar, Gamepad2, BookOpen, Sun, Moon, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
+import { useAuth } from "@/hooks/useAuth";
 
 const navItems = [
   { to: "/", icon: Home, label: "Home" },
@@ -12,7 +13,14 @@ const navItems = [
 
 const MobileNav = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
+  const { signOut } = useAuth();
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate("/login");
+  };
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-md border-t border-border px-2 py-2">
@@ -41,6 +49,13 @@ const MobileNav = () => {
         >
           {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           {theme === "dark" ? "Light" : "Dark"}
+        </button>
+        <button
+          onClick={handleLogout}
+          className="flex flex-col items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground transition-all"
+        >
+          <LogOut className="h-5 w-5" />
+          Logout
         </button>
       </div>
     </nav>
