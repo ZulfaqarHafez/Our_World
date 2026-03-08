@@ -22,6 +22,12 @@ async function getFileType() {
   return (_fileType as any).default || _fileType;
 }
 
+let _xlsx: any = null;
+async function getXlsx() {
+  if (!_xlsx) _xlsx = await import("xlsx");
+  return (_xlsx as any).default || _xlsx;
+}
+
 export const studyRouter = Router();
 
 // ─── Constants ───────────────────────────────────────────────
@@ -40,7 +46,14 @@ const INPUT_COST_PER_M = 0.15;
 const OUTPUT_COST_PER_M = 0.6;
 const MAX_QUESTION_LENGTH = 2000;
 const MAX_MODULE_NAME_LENGTH = 100;
-const ALLOWED_MIME_TYPES = ["application/pdf", "text/plain", "text/markdown"];
+const ALLOWED_MIME_TYPES = [
+  "application/pdf",
+  "text/plain",
+  "text/markdown",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+  "application/vnd.ms-excel", // .xls
+  "text/csv",
+];
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -196,16 +209,50 @@ studyRouter.post("/ingest", async (req: Request, res: Response) => {
     const mimeType = detectedType?.mime || mime_type || "application/octet-stream";
 
     // For text files, fileType.fromBuffer may return undefined — that's OK
-    if (detectedType && !ALLOWED_MIME_TYPES.includes(detectedType.mime)) {
-      return res.status(400).json({ error: "Unsupported file type. Upload PDF or TXT files." });
+    const EXCEL_MIMES = [
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel",
+    ];
+    const isExcel = (detectedType && EXCEL_MIMES.includes(detectedType.mime)) ||
+      EXCEL_MIMES.includes(mime_type) ||
+      /\.(xlsx|xls|csv)$/i.test(filename);
+
+    if (detectedType && !ALLOWED_MIME_TYPES.includes(detectedType.mime) && !isExcel) {
+      return res.status(400).json({ error: "Unsupported file type. Upload PDF, TXT, or Excel files." });
     }
-    if (!detectedType && !["text/plain", "text/markdown"].includes(mime_type)) {
-      return res.status(400).json({ error: "Unsupported file type. Upload PDF or TXT files." });
+    if (!detectedType && !isExcel && !["text/plain", "text/markdown", "text/csv"].includes(mime_type)) {
+      return res.status(400).json({ error: "Unsupported file type. Upload PDF, TXT, or Excel files." });
     }
 
-    // 2. Parse PDF text
+    // 2. Parse file content to text
     let text = "";
-    if (mimeType === "application/pdf") {
+    if (isExcel || mime_type === "text/csv" || /\.(xlsx|xls|csv)$/i.test(filename)) {
+      // Parse Excel/CSV using xlsx
+      const XLSX = await getXlsx();
+      const wb = XLSX.read(buffer, { type: "buffer" });
+      const parts: string[] = [];
+      for (const sheetName of wb.SheetNames) {
+        const ws = wb.Sheets[sheetName];
+        const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+        if (rows.length === 0) continue;
+        const headers = rows[0].map((h: any) => String(h || "").trim());
+        parts.push(`Sheet: ${sheetName}`);
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (row.every((c: any) => c === "" || c == null)) continue;
+          const fields = headers
+            .map((h, ci) => {
+              const val = row[ci];
+              if (val === "" || val == null) return null;
+              return h ? `${h}: ${val}` : String(val);
+            })
+            .filter(Boolean);
+          if (fields.length > 0) parts.push(fields.join(", "));
+        }
+        parts.push(""); // blank line between sheets
+      }
+      text = parts.join("\n");
+    } else if (mimeType === "application/pdf") {
       const pdf = await getPdfParse();
       const pdfData = await pdf(buffer);
       text = pdfData.text;

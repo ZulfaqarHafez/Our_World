@@ -13,6 +13,7 @@ import DatesPage from "@/pages/DatesPage";
 import DateDetail from "@/pages/DateDetail";
 import GamesPage from "@/pages/GamesPage";
 import StudyPage from "@/pages/StudyPage";
+import ExcelCleanerPage from "@/pages/ExcelCleanerPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -43,6 +44,7 @@ const App = () => (
                   <Route path="/dates/:id" element={<DateDetail />} />
                   <Route path="/games" element={<GamesPage />} />
                   <Route path="/study" element={<StudyPage />} />
+                  <Route path="/tools" element={<ExcelCleanerPage />} />
                 </Route>
               </Route>
               <Route path="*" element={<NotFound />} />

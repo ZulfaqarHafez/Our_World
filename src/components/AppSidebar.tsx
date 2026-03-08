@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Heart, Calendar, Gamepad2, BookOpen, LogOut, Home, Sun, Moon } from "lucide-react";
+import { Heart, Calendar, Gamepad2, BookOpen, LogOut, Home, Sun, Moon, FileSpreadsheet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "next-themes";
@@ -9,6 +9,7 @@ const navItems = [
   { to: "/dates", icon: Calendar, label: "Date Log" },
   { to: "/games", icon: Gamepad2, label: "Scoreboard" },
   { to: "/study", icon: BookOpen, label: "Study" },
+  { to: "/tools", icon: FileSpreadsheet, label: "Excel Cleaner" },
 ];
 
 const AppSidebar = () => {

@@ -820,6 +820,7 @@ const StudyPage = () => {
           </div>
         </div>
       )}
+
     </motion.div>
   );
 };

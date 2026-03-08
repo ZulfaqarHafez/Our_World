@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Home, Calendar, Gamepad2, BookOpen, Sun, Moon, LogOut } from "lucide-react";
+import { Home, Calendar, Gamepad2, BookOpen, Sun, Moon, LogOut, FileSpreadsheet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
@@ -9,6 +9,7 @@ const navItems = [
   { to: "/dates", icon: Calendar, label: "Dates" },
   { to: "/games", icon: Gamepad2, label: "Games" },
   { to: "/study", icon: BookOpen, label: "Study" },
+  { to: "/tools", icon: FileSpreadsheet, label: "Excel" },
 ];
 
 const MobileNav = () => {
