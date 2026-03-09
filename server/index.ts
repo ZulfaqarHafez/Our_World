@@ -58,7 +58,7 @@ if (!IS_VERCEL) {
 }
 
 // ─── Body parser with reasonable limit ──────────────────────
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "1mb" }));
 
 // Health check
 app.get("/api/health", (_req, res) => {

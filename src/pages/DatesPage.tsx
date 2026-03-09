@@ -6,7 +6,7 @@ import { useDates } from "@/hooks/useDatesGames";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { getAccessToken } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import datesHero from "@/assets/dates-hero.jpg";
 
 const container = {
@@ -57,24 +57,26 @@ const DatesPage = () => {
     setImageFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Upload images and return storage paths
+  // Upload images directly to Supabase Storage (bypasses Vercel body limit)
   const uploadImages = async (): Promise<string[]> => {
     if (imageFiles.length === 0) return [];
-    const token = await getAccessToken();
-    if (!token) throw new Error("Not authenticated");
-    const fd = new FormData();
-    imageFiles.forEach((f) => fd.append("images", f));
-    const res = await fetch("/api/photos/upload", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: fd,
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.error || "Upload failed");
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const paths: string[] = [];
+    for (const file of imageFiles) {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const safeName = `${crypto.randomUUID()}.${ext}`;
+      const storagePath = `${user.id}/${safeName}`;
+
+      const { error } = await supabase.storage
+        .from("couple-photos")
+        .upload(storagePath, file, { contentType: file.type });
+
+      if (error) throw new Error(`Upload failed for ${file.name}: ${error.message}`);
+      paths.push(storagePath);
     }
-    const data = await res.json();
-    return data.paths as string[];
+    return paths;
   };
 
   const filtered = dates.filter(
